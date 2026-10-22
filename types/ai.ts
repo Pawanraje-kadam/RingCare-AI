@@ -4,6 +4,8 @@ export interface AiResponseMeta {
   mode: "gemini" | "fallback";
   reason?: FallbackReason;
   message?: string;
+  /** Short, safe provider diagnostic (HTTP status / schema issue). No secrets. */
+  detail?: string;
   model?: string;
   cached: boolean;
   generatedAt: string;
@@ -13,6 +15,7 @@ export interface AiAnalysisMeta {
   mode: "gemini" | "fallback";
   reason?: FallbackReason;
   message?: string;
+  detail?: string;
   model?: string;
   cached: boolean;
   generatedAt: string;
@@ -117,10 +120,30 @@ export interface ActivityInsight {
   generatedAt: string;
 }
 
+export type AiHealthVerification =
+  | "ok"
+  | "not_configured"
+  | "invalid_key"
+  | "model_unavailable"
+  | "quota"
+  | "unreachable"
+  | "error"
+  | "unverified";
+
 export interface AiHealth {
   configured: boolean;
   provider: "Google Gemini";
   model: string;
+  modelLabel: string;
   promptVersion: string;
+  /** True only when Gemini answered a metadata request with this key. */
+  credentialsVerified: boolean;
+  verificationStatus: AiHealthVerification;
+  verificationMessage?: string;
+  /** Which server-side env var supplied the key (name only). */
+  keySource?: "GEMINI_API_KEY" | "GOOGLE_API_KEY" | null;
+  /** Set when GEMINI_MODEL could not be honoured (the app is pinned to 3.8 Flash). */
+  modelNotice?: string;
+  latencyMs?: number;
   checkedAt: string;
 }

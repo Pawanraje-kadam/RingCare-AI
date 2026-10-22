@@ -14,7 +14,9 @@ import {
 } from "@/lib/constants/events";
 import {
   AI_LIMITS,
+  AI_VERIFICATION_STATUSES,
   DEFAULT_GEMINI_MODEL,
+  GEMINI_MODEL_LABEL,
   PROMPT_VERSION,
 } from "@/lib/constants/ai";
 import {
@@ -420,6 +422,7 @@ export const aiResponseMetaSchema = z
     mode: z.enum(["gemini", "fallback"]),
     reason: z.enum(FALLBACK_REASONS).optional(),
     message: z.string().trim().max(320).optional(),
+    detail: z.string().trim().max(200).optional(),
     model: safeModelNameSchema.optional(),
     cached: z.boolean(),
     generatedAt: isoDateTimeSchema,
@@ -663,8 +666,14 @@ export const healthResponseSchema = z
       configured: z.boolean(),
       provider: z.literal("Google Gemini"),
       model: safeModelNameSchema,
+      modelLabel: z.string().trim().max(80).default(GEMINI_MODEL_LABEL),
       promptVersion: z.string(),
-      credentialsVerified: z.literal(false),
+      credentialsVerified: z.boolean(),
+      verificationStatus: z.enum(AI_VERIFICATION_STATUSES),
+      verificationMessage: z.string().trim().max(360).optional(),
+      keySource: z.enum(["GEMINI_API_KEY", "GOOGLE_API_KEY"]).nullable().optional(),
+      modelNotice: z.string().trim().max(200).optional(),
+      latencyMs: z.number().int().min(0).optional(),
     }),
     checkedAt: isoDateTimeSchema,
   })

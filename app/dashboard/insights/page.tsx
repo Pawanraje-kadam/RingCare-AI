@@ -220,6 +220,11 @@ export default function InsightsPage() {
                     <Callout tone="warning" title="Generated without Gemini">
                       {meta.message ??
                         "AI was unavailable, so these observations were assembled deterministically from the same facts."}
+                      {meta.detail ? (
+                        <span className="mt-1 block font-mono text-[10.5px]">
+                          {meta.detail}
+                        </span>
+                      ) : null}
                     </Callout>
                   ) : null}
 
