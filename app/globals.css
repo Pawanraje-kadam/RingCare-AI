@@ -1,0 +1,291 @@
+@import "tailwindcss";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+@theme inline {
+  --font-sans: "Inter Variable", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-strong: var(--brand-strong);
+  --color-brand-soft: var(--brand-soft);
+  --color-brand-contrast: var(--brand-contrast);
+  --color-amber: var(--amber);
+  --color-amber-soft: var(--amber-soft);
+  --color-danger: var(--danger);
+  --color-danger-soft: var(--danger-soft);
+  --color-info: var(--info);
+  --color-chart-routine: var(--chart-routine);
+  --color-chart-review: var(--chart-review);
+  --color-chart-high: var(--chart-high);
+  --color-chart-unknown: var(--chart-unknown);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-ink: var(--sidebar-ink);
+  --color-sidebar-muted: var(--sidebar-muted);
+  --color-sidebar-line: var(--sidebar-line);
+  --color-sidebar-accent: var(--sidebar-accent);
+
+  --shadow-card: var(--shadow-card-value);
+  --shadow-raised: var(--shadow-raised-value);
+  --radius-card: 1.1rem;
+
+  --animate-fade-up: fade-up 0.35s cubic-bezier(0.22, 1, 0.36, 1) both;
+  --animate-fade-in: fade-in 0.25s ease-out both;
+  --animate-new-event: new-event 1.4s ease-out;
+  --animate-dialog-in: dialog-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-sheet-in: sheet-in 0.25s cubic-bezier(0.22, 1, 0.36, 1);
+  --animate-overlay-in: fade-in 0.2s ease-out;
+}
+
+:root {
+  --canvas: #f4f2ec;
+  --surface: #ffffff;
+  --surface-2: #fbf9f5;
+  --surface-3: #f0ede5;
+  --line: #e6e1d6;
+  --line-strong: #d5cec0;
+  --ink: #15211f;
+  --ink-2: #33433f;
+  --muted: #687571;
+  --brand: #0f5f56;
+  --brand-strong: #0a4a43;
+  --brand-soft: #e3f1ed;
+  --brand-contrast: #ffffff;
+  --amber: #a45b10;
+  --amber-soft: #fbefdc;
+  --danger: #ad2b20;
+  --danger-soft: #fbe9e6;
+  --info: #3e5a74;
+  --chart-routine: #12776c;
+  --chart-review: #b9791f;
+  --chart-high: #b3372b;
+  --chart-unknown: #7e8d95;
+  --sidebar: #0b1c20;
+  --sidebar-ink: #edf3f0;
+  --sidebar-muted: #93a6a0;
+  --sidebar-line: #223438;
+  --sidebar-accent: #7fd0c1;
+  --shadow-card-value: 0 1px 2px rgb(21 33 31 / 0.04), 0 10px 30px -22px rgb(21 33 31 / 0.25);
+  --shadow-raised-value: 0 2px 4px rgb(21 33 31 / 0.05), 0 18px 40px -24px rgb(21 33 31 / 0.35);
+}
+
+.dark {
+  --canvas: #0a1315;
+  --surface: #101c1f;
+  --surface-2: #132124;
+  --surface-3: #18282c;
+  --line: #223337;
+  --line-strong: #31464b;
+  --ink: #edf2ee;
+  --ink-2: #cbd6d1;
+  --muted: #9aaba5;
+  --brand: #5fc7b5;
+  --brand-strong: #7ad8c8;
+  --brand-soft: #112e29;
+  --brand-contrast: #04211d;
+  --amber: #d69a4a;
+  --amber-soft: #2b2214;
+  --danger: #e07a6f;
+  --danger-soft: #2d1917;
+  --info: #8fb3cf;
+  --chart-routine: #4bb3a1;
+  --chart-review: #d7a04b;
+  --chart-high: #e17669;
+  --chart-unknown: #93a5ad;
+  --sidebar: #071012;
+  --sidebar-ink: #e9f1ee;
+  --sidebar-muted: #8ba099;
+  --sidebar-line: #1d2e32;
+  --sidebar-accent: #8ad6c7;
+  --shadow-card-value: 0 1px 2px rgb(0 0 0 / 0.3), 0 12px 32px -24px rgb(0 0 0 / 0.8);
+  --shadow-raised-value: 0 2px 4px rgb(0 0 0 / 0.35), 0 22px 48px -28px rgb(0 0 0 / 0.9);
+}
+
+@layer base {
+  * {
+    border-color: var(--line);
+  }
+
+  html {
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+    background-color: var(--canvas);
+  }
+
+  body {
+    min-height: 100svh;
+    background-color: var(--canvas);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    letter-spacing: -0.022em;
+    text-wrap: balance;
+  }
+
+  p {
+    text-wrap: pretty;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--brand) 24%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--brand);
+    outline-offset: 2px;
+  }
+
+  button,
+  [role="button"],
+  a,
+  input,
+  select,
+  textarea {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input[type="range"] {
+    accent-color: var(--brand);
+  }
+
+  input[type="checkbox"] {
+    accent-color: var(--brand);
+  }
+
+  /* Subtle scrollbar without hiding scroll affordance. */
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--line-strong) transparent;
+  }
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes new-event {
+  0% {
+    box-shadow: 0 0 0 0 color-mix(in oklab, var(--brand) 35%, transparent);
+  }
+  45% {
+    box-shadow: 0 0 0 4px color-mix(in oklab, var(--brand) 16%, transparent);
+  }
+  100% {
+    box-shadow: 0 0 0 0 transparent;
+  }
+}
+
+@keyframes dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes sheet-in {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+@layer components {
+  .dialog-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 60;
+    background-color: rgb(6 15 16 / 0.58);
+    backdrop-filter: blur(4px);
+    animation: var(--animate-overlay-in);
+  }
+
+  .dialog-content {
+    position: fixed;
+    left: 50%;
+    top: 50%;
+    z-index: 61;
+    transform: translate(-50%, -50%);
+    overflow-y: auto;
+    border: 1px solid var(--line);
+    border-radius: 1.25rem;
+    background-color: var(--surface);
+    box-shadow: var(--shadow-raised-value);
+    animation: var(--animate-dialog-in);
+  }
+
+  .sheet-content {
+    position: fixed;
+    inset-block: 0;
+    left: 0;
+    z-index: 61;
+    width: min(86vw, 20rem);
+    overflow-y: auto;
+    border-right: 1px solid var(--sidebar-line);
+    background-color: var(--sidebar);
+    animation: var(--animate-sheet-in);
+  }
+
+  .text-balance {
+    text-wrap: balance;
+  }
+
+  .text-pretty {
+    text-wrap: pretty;
+  }
+
+  .surface-grid {
+    background-image:
+      linear-gradient(to right, color-mix(in oklab, var(--line) 40%, transparent) 1px, transparent 1px),
+      linear-gradient(to bottom, color-mix(in oklab, var(--line) 40%, transparent) 1px, transparent 1px);
+    background-size: 32px 32px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
