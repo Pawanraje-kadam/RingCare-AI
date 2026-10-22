@@ -129,7 +129,7 @@ export interface FallbackAnalysisOptions {
   notice?: string;
 }
 
-/** Deterministic explanation used whenever Gemini is unavailable or rejected. */
+/** Deterministic explanation used whenever Groq is unavailable or rejected. */
 export function createFallbackAnalysis({
   event,
   evaluation,
@@ -154,7 +154,7 @@ export function createFallbackAnalysis({
     attentionLevel: evaluation.attentionLevel,
     uncertainty: uncertaintyFor(event, evaluation),
     limitations: [
-      "Rules-based explanation generated without Gemini.",
+      "Rules-based explanation generated without Groq.",
       "Simulated demo event: no video, audio, or images were analysed.",
       "Event labels and durations are input metadata, not verified observations.",
       `Attention category “${ATTENTION_META[evaluation.attentionLevel].label}” comes from deterministic rules.`,
@@ -255,7 +255,7 @@ export function createFallbackSummary({
     limitations: [
       "This summary describes only the supplied demo event records.",
       "Absence of a record does not mean that no activity occurred.",
-      "Rules-based summary generated without Gemini.",
+      "Rules-based summary generated without Groq.",
     ],
     source: "fallback",
     notice: notice ?? SAFE_AI_MESSAGES[reason],
@@ -338,7 +338,7 @@ export function createFallbackInsight({
     observations: observations.slice(0, 5),
     limitations: [
       ...facts.limitations.slice(0, 2),
-      "Rules-based narrative generated without Gemini.",
+      "Rules-based narrative generated without Groq.",
     ],
     source: "fallback",
     notice: notice ?? SAFE_AI_MESSAGES[reason],

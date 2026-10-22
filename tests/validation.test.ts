@@ -35,7 +35,7 @@ describe("event schema", () => {
     expect(ringCareEventSchema.safeParse(mismatch).success).toBe(false);
   });
 
-  it("does not allow ai_complete without a Gemini-sourced analysis", () => {
+  it("does not allow ai_complete without a Groq-sourced analysis", () => {
     const event = makeEvent({ processingStatus: "ai_complete" });
     expect(ringCareEventSchema.safeParse(event).success).toBe(false);
   });

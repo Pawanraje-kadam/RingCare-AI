@@ -345,7 +345,7 @@ export function AppProvider({
           const next: RingCareEvent = {
             ...event,
             analysis,
-            processingStatus: analysis.source === "gemini" ? "ai_complete" : "ai_fallback",
+            processingStatus: analysis.source === "groq" ? "ai_complete" : "ai_fallback",
           };
           if (shouldStoreAnalysisError(meta.reason)) {
             next.analysisError = {
@@ -420,8 +420,8 @@ export function AppProvider({
           });
         }
         if (
-          (parsed.data.meta.mode === "gemini" &&
-            parsed.data.analysis.source !== "gemini") ||
+          (parsed.data.meta.mode === "groq" &&
+            parsed.data.analysis.source !== "groq") ||
           (parsed.data.meta.mode === "fallback" &&
             parsed.data.analysis.source !== "fallback")
         ) {

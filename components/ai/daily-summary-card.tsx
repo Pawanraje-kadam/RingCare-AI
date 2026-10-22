@@ -137,7 +137,7 @@ export function DailySummaryCard() {
 
             {summary.meta.mode === "fallback" && summary.meta.reason === "missing_api_key" ? (
               <p className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-[11px] leading-5 text-muted">
-                No server-side Gemini key is configured, so this summary was produced by
+                No server-side Groq key is configured, so this summary was produced by
                 deterministic rules.{" "}
                 <Link href="/dashboard/settings" className="font-medium text-brand underline underline-offset-2">
                   View AI settings
@@ -152,7 +152,7 @@ export function DailySummaryCard() {
             <p className="text-[12.5px] font-medium text-ink">No summary generated yet</p>
             <p className="mt-1 text-[11.5px] leading-5 text-muted">
               The AI service status is still being checked. You can request a summary now;
-              if Gemini is unavailable, a deterministic summary will be produced and
+              if Groq is unavailable, a deterministic summary will be produced and
               clearly labelled.
             </p>
             <Button

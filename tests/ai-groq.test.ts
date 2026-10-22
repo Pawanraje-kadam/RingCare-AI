@@ -6,7 +6,7 @@ import {
   generateDailySummary,
   interpretSearchQuery,
 } from "@/lib/ai/service";
-import type { GeminiJsonClient } from "@/lib/ai/gemini";
+import type { GroqJsonClient } from "@/lib/ai/groq";
 import { evaluateEvent } from "@/lib/events/rules";
 import { toEventDigest } from "@/lib/events/digest";
 import { parseSettings } from "@/lib/validation/schemas";
@@ -17,9 +17,9 @@ const analysisSettings = toAnalysisSettings(parseSettings({}));
 
 type Responder = (call: number, prompt: string) => string;
 
-function fakeClient(responder: Responder, model = "gemini-3.8-flash") {
+function fakeClient(responder: Responder, model = "llama-3.3-70b-versatile") {
   let calls = 0;
-  const client: GeminiJsonClient & { calls: () => number } = {
+  const client: GroqJsonClient & { calls: () => number } = {
     model,
     calls: () => calls,
     async generateJson(input) {
@@ -48,10 +48,10 @@ beforeEach(() => {
   clearAiCache();
 });
 
-describe("Gemini narration path", () => {
-  it("returns a Gemini-labelled analysis and keeps the rule attention level", async () => {
+describe("Groq narration path", () => {
+  it("returns a Groq-labelled analysis and keeps the rule attention level", async () => {
     const event = makeEvent({
-      id: "evt_gemini_delivery",
+      id: "evt_groq_delivery",
       eventType: "delivery_related",
       occurredAt: minutesAgo(20),
       availableMetadata: { packageDetected: true },
@@ -67,16 +67,16 @@ describe("Gemini narration path", () => {
       client,
     });
 
-    expect(result.meta.mode).toBe("gemini");
-    expect(result.meta.model).toBe("gemini-3.8-flash");
-    expect(result.analysis.source).toBe("gemini");
+    expect(result.meta.mode).toBe("groq");
+    expect(result.meta.model).toBe("llama-3.3-70b-versatile");
+    expect(result.analysis.source).toBe("groq");
     expect(result.analysis.attentionLevel).toBe(evaluation.attentionLevel);
     expect(client.calls()).toBe(1);
   });
 
   it("retries once with a corrective instruction when the model disagrees with the rules", async () => {
     const event = makeEvent({
-      id: "evt_gemini_mismatch",
+      id: "evt_groq_mismatch",
       eventType: "delivery_related",
       occurredAt: minutesAgo(25),
       availableMetadata: { packageDetected: true },
@@ -100,12 +100,12 @@ describe("Gemini narration path", () => {
     });
 
     expect(client.calls()).toBe(2);
-    expect(result.meta.mode).toBe("gemini");
+    expect(result.meta.mode).toBe("groq");
     expect(result.analysis.attentionLevel).toBe(evaluation.attentionLevel);
   });
 
   it("retries malformed JSON once and then succeeds", async () => {
-    const event = makeEvent({ id: "evt_gemini_json", occurredAt: minutesAgo(15) });
+    const event = makeEvent({ id: "evt_groq_json", occurredAt: minutesAgo(15) });
     const evaluation = evaluateEvent(event, analysisSettings, [event]);
     const client = fakeClient((call) =>
       call === 1 ? "not json at all" : JSON.stringify(analyzePayload(evaluation.attentionLevel)),
@@ -120,11 +120,11 @@ describe("Gemini narration path", () => {
     });
 
     expect(client.calls()).toBe(2);
-    expect(result.meta.mode).toBe("gemini");
+    expect(result.meta.mode).toBe("groq");
   });
 
   it("falls back when the model keeps making unsupported claims", async () => {
-    const event = makeEvent({ id: "evt_gemini_unsafe", occurredAt: minutesAgo(12) });
+    const event = makeEvent({ id: "evt_groq_unsafe", occurredAt: minutesAgo(12) });
     const unsafe = {
       ...analyzePayload("routine"),
       summary: "An intruder was seen and the house is completely safe.",
@@ -147,9 +147,9 @@ describe("Gemini narration path", () => {
     );
   });
 
-  it("produces a Gemini daily summary grounded in facts", async () => {
+  it("produces a Groq daily summary grounded in facts", async () => {
     const event = makeEvent({
-      id: "evt_gemini_summary",
+      id: "evt_groq_summary",
       eventType: "delivery_related",
       occurredAt: minutesAgo(30),
       availableMetadata: { packageDetected: true },
@@ -175,15 +175,15 @@ describe("Gemini narration path", () => {
       client,
     });
 
-    expect(summary.meta.mode).toBe("gemini");
-    expect(summary.narrative.source).toBe("gemini");
+    expect(summary.meta.mode).toBe("groq");
+    expect(summary.narrative.source).toBe("groq");
     expect(summary.narrative.headline).toBe("Quiet day at the front door");
   });
 
   it("falls back with a safe detail when the provider rejects the key", async () => {
-    const event = makeEvent({ id: "evt_gemini_auth", occurredAt: minutesAgo(11) });
-    const client: GeminiJsonClient = {
-      model: "gemini-3.8-flash",
+    const event = makeEvent({ id: "evt_groq_auth", occurredAt: minutesAgo(11) });
+    const client: GroqJsonClient = {
+      model: "llama-3.3-70b-versatile",
       async generateJson() {
         throw new Error("HTTP 401: API key not valid");
       },
@@ -201,7 +201,7 @@ describe("Gemini narration path", () => {
     expect(result.meta.detail).toMatch(/401/);
   });
 
-  it("interprets a search query with Gemini", async () => {
+  it("interprets a search query with Groq", async () => {
     const client = fakeClient(() =>
       JSON.stringify({
         intent: "filter",
@@ -226,16 +226,16 @@ describe("Gemini narration path", () => {
       client,
     });
 
-    expect(interpretation.interpretedBy).toBe("gemini");
-    expect(interpretation.meta.mode).toBe("gemini");
+    expect(interpretation.interpretedBy).toBe("groq");
+    expect(interpretation.meta.mode).toBe("groq");
     expect(interpretation.plan.eventTypes).toEqual(["delivery_related"]);
     expect(interpretation.plan.timeOfDay).toBeNull();
     expect(interpretation.plan.minDurationSeconds).toBeNull();
   });
 
-  it("produces a Gemini comparative insight", async () => {
+  it("produces a Groq comparative insight", async () => {
     const current = makeEvent({
-      id: "evt_gemini_insight",
+      id: "evt_groq_insight",
       occurredAt: minutesAgo(30),
       eventType: "delivery_related",
       availableMetadata: { packageDetected: true },
@@ -261,7 +261,7 @@ describe("Gemini narration path", () => {
       client,
     });
 
-    expect(insight.meta.mode).toBe("gemini");
+    expect(insight.meta.mode).toBe("groq");
     expect(insight.narrative.headline).toBe("Similar activity to the previous period");
   });
 });

@@ -1,30 +1,27 @@
 /**
- * Pinned Gemini model and server-side AI limits.
+ * Groq model and server-side AI limits.
  *
- * The app is written, prompted, and tested against Gemini 3.8 Flash. The model
- * identifier is pinned here and used by every AI route, the health check, the
- * settings page, and the tests. `GEMINI_MODEL` may repeat the same model (with
- * or without a `models/` prefix), but it cannot switch the app to a different
- * model.
+ * RingCare AI uses Groq's OpenAI-compatible Chat Completions API with
+ * `llama-3.3-70b-versatile`. The model identifier and display label live here
+ * so every AI route, the health check, Settings, and the tests report the same
+ * value.
  */
-export const GEMINI_MODEL_ID = "gemini-3.8-flash";
+export const GROQ_MODEL_ID = "llama-3.3-70b-versatile";
 
 /** Display label kept in one place for UI copy. */
-export const GEMINI_MODEL_LABEL = "Gemini 3.8 Flash";
+export const GROQ_MODEL_LABEL = "Llama 3.3 70B";
 
 /** Backwards-compatible alias used across the codebase. */
-export const DEFAULT_GEMINI_MODEL = GEMINI_MODEL_ID;
+export const DEFAULT_GROQ_MODEL = GROQ_MODEL_ID;
 
-/**
- * Gemini 3.8 Flash thinks at "medium" by default and MINIMAL is rejected for
- * this model. "low" is the fastest supported level and is enough for the short,
- * schema-constrained JSON tasks used here; without it, thinking tokens can
- * consume the whole output budget and delay responses past the route timeout.
- */
-export const GEMINI_THINKING_LEVEL = "LOW" as const;
+/** Provider name shown in the UI and health endpoint. */
+export const AI_PROVIDER_NAME = "Groq";
+
+/** Default OpenAI-compatible endpoint. Overridable for proxies and tests. */
+export const DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 /** Bump when prompts change so cached analyses are not reused. */
-export const PROMPT_VERSION = "2026-10-23.2";
+export const PROMPT_VERSION = "2026-10-24.1";
 
 export const AI_LIMITS = {
   analyzeTimeoutMs: 20_000,
@@ -43,10 +40,7 @@ export const AI_LIMITS = {
   rateLimitRequestsPerMinute: 12,
   cacheMaxEntries: 150,
   cacheTtlMs: 30 * 60 * 1000,
-  /**
-   * Output budgets include any thinking tokens, so they are intentionally
-   * larger than the JSON payloads need.
-   */
+  /** Output budgets for the JSON payloads these prompts request. */
   maxOutputTokensNarrative: 2048,
   maxOutputTokensSearch: 1024,
 } as const;
@@ -80,17 +74,17 @@ export const SAFE_AI_MESSAGES: Record<FallbackReason, string> = {
  */
 export const AI_FALLBACK_HINTS: Partial<Record<FallbackReason, string>> = {
   missing_api_key:
-    "Add GEMINI_API_KEY (or GOOGLE_API_KEY) to your deployment environment and redeploy.",
+    "Add GROQ_API_KEY to your deployment environment and redeploy.",
   provider_error:
-    "Gemini rejected the request. Check the key, the pinned model, and the AI status in Settings.",
+    "Groq rejected the request. Check the key, the configured model, and the AI status in Settings.",
   rate_limited:
-    "Gemini quota for this project is exhausted. Check https://aistudio.google.com/rate-limit.",
+    "Groq quota or per-minute limit reached. Check https://console.groq.com/settings/limits.",
   network_error:
-    "The server could not reach Gemini. Check outbound network access and try again.",
+    "The server could not reach Groq. Check outbound network access and try again.",
   timeout:
-    "Gemini took too long. Try again, or keep using the deterministic rules.",
+    "Groq took too long. Try again, or keep using the deterministic rules.",
   invalid_response:
-    "Gemini returned data that did not match the required schema. Retrying usually works.",
+    "Groq returned data that did not match the required schema. Retrying usually works.",
   unsafe_response:
     "The model's wording exceeded the evidence rules, so it was discarded.",
 };
@@ -107,3 +101,12 @@ export const AI_VERIFICATION_STATUSES = [
 ] as const;
 
 export type AiVerificationStatus = (typeof AI_VERIFICATION_STATUSES)[number];
+
+/** Safe fallback reasons surfaced by the Groq client. */
+export const GROQ_FALLBACK_REASONS = [
+  "timeout",
+  "rate_limited",
+  "provider_error",
+  "invalid_response",
+  "network_error",
+] as const satisfies readonly FallbackReason[];

@@ -6,7 +6,7 @@ import { AI_LIMITS } from "@/lib/constants/ai";
  * Lightweight per-instance cache.
  *
  * Vercel may run many serverless instances; this cache is not shared between
- * them. It only reduces repeated Gemini calls within one warm instance.
+ * them. It only reduces repeated Groq calls within one warm instance.
  */
 
 interface CacheEntry {

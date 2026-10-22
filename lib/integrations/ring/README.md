@@ -36,9 +36,9 @@ Future additions should:
 2. Normalize raw payloads into the existing event schema.
 3. Validate with Zod and boundary limits (timestamp sanity, duration bounds,
    description length, supported event types).
-4. Never pass raw credentials or live video/audio to the browser or Gemini.
+4. Never pass raw credentials or live video/audio to the browser or the AI provider.
 5. Route normalized events through the same deterministic rule engine and optional
-   Gemini explanation layer.
+   Groq explanation layer.
 6. Add webhook signature verification, replay protection, and a durable queue/store
    before production use.
 

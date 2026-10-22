@@ -108,7 +108,7 @@ export default function InsightsPage() {
       <PageHeader
         eyebrow="Demo workspace"
         title="AI insights"
-        description="Grounded comparisons of recorded demo events across two periods. Gemini may narrate the computed facts; it cannot invent counts or predict what will happen."
+        description="Grounded comparisons of recorded demo events across two periods. Groq may narrate the computed facts; it cannot invent counts or predict what will happen."
         actions={
           <>
             <div
@@ -217,7 +217,7 @@ export default function InsightsPage() {
                   )}
 
                   {meta.mode === "fallback" ? (
-                    <Callout tone="warning" title="Generated without Gemini">
+                    <Callout tone="warning" title="Generated without Groq">
                       {meta.message ??
                         "AI was unavailable, so these observations were assembled deterministically from the same facts."}
                       {meta.detail ? (
@@ -253,7 +253,7 @@ export default function InsightsPage() {
                 <EmptyState
                   icon={Sparkles}
                   title="No insight generated yet"
-                  description="Generate an insight for this period. If Gemini is unavailable, a clearly labelled deterministic version is produced."
+                  description="Generate an insight for this period. If Groq is unavailable, a clearly labelled deterministic version is produced."
                   action={
                     <Button onClick={() => void generate(range)} disabled={busy}>
                       {busy ? (

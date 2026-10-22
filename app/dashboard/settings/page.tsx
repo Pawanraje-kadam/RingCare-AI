@@ -37,7 +37,12 @@ import {
   type EventType,
 } from "@/lib/constants/events";
 import { SETTINGS_LIMITS } from "@/lib/constants/settings";
-import { AI_LIMITS, DEFAULT_GEMINI_MODEL, GEMINI_MODEL_ID } from "@/lib/constants/ai";
+import {
+  AI_LIMITS,
+  DEFAULT_GROQ_MODEL,
+  GROQ_MODEL_ID,
+  GROQ_MODEL_LABEL,
+} from "@/lib/constants/ai";
 import { describeAiHealth } from "@/lib/ai/health-display";
 import { cn } from "@/lib/utils/cn";
 import type { AppSettings } from "@/types/settings";
@@ -487,12 +492,12 @@ export default function SettingsPage() {
           <SettingsSection
             id="ai"
             title="AI analysis"
-            description="Optional Gemini narration over locally computed facts."
+            description="Optional Groq narration over locally computed facts."
             icon={Sparkles}
           >
             <ToggleRow
               id="ai-enabled"
-              label="Use Gemini when available"
+              label="Use Groq when available"
               description="When off, all explanations, summaries, insights, and searches use deterministic local logic. The app remains functional."
               checked={draft.aiEnabled}
               onCheckedChange={(checked) => patch({ aiEnabled: checked })}
@@ -509,12 +514,16 @@ export default function SettingsPage() {
               <dl className="mt-2.5 space-y-1.5 text-[10.5px]">
                 <div className="flex justify-between gap-2">
                   <dt className="text-muted">Provider</dt>
-                  <dd className="text-right text-ink-2">Google Gemini</dd>
+                  <dd className="text-right text-ink-2">Groq</dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Model label</dt>
+                  <dd className="text-right text-ink-2">{GROQ_MODEL_LABEL}</dd>
                 </div>
                 <div className="flex justify-between gap-2">
                   <dt className="text-muted">Model</dt>
                   <dd className="text-right font-mono text-ink-2">
-                    {aiHealth?.model ?? DEFAULT_GEMINI_MODEL}
+                    {aiHealth?.model ?? DEFAULT_GROQ_MODEL}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -573,14 +582,15 @@ export default function SettingsPage() {
             <Callout tone="neutral" title="How the key is handled">
               <ol className="mt-1 list-decimal space-y-1 pl-4">
                 <li>
-                  Set <code className="font-mono text-[10.5px]">GEMINI_API_KEY</code> as a
+                  Set <code className="font-mono text-[10.5px]">GROQ_API_KEY</code> as a
                   server-only environment variable.
                 </li>
                 <li>
-                  RingCare AI is pinned to{" "}
-                  <code className="font-mono text-[10.5px]">{GEMINI_MODEL_ID}</code>. A{" "}
-                  <code className="font-mono text-[10.5px]">GEMINI_MODEL</code> value that names
-                  a different model is ignored.
+                  The default model is{" "}
+                  <code className="font-mono text-[10.5px]">{GROQ_MODEL_ID}</code>. Set{" "}
+                  <code className="font-mono text-[10.5px]">GROQ_MODEL</code> only to choose a
+                  different Groq model; the active model is shown above and on every AI
+                  response.
                 </li>
                 <li>
                   The key is read only in server API routes. It is never included in client
@@ -589,15 +599,16 @@ export default function SettingsPage() {
               </ol>
             </Callout>
             <p className="text-[10.5px] leading-5 text-muted">
-              The connection check calls Gemini’s free model-metadata endpoint with your
-              server-side key, so it verifies validity without spending generation tokens.{" "}
+              The connection check calls Groq’s free <code className="font-mono text-[10px]">/models</code>{" "}
+              endpoint with your server-side key, so it verifies validity without spending
+              completion tokens and confirms llama-3.3-70b-versatile is available.{" "}
               <a
-                href="https://ai.google.dev/gemini-api/docs/api-key"
+                href="https://console.groq.com/keys"
                 target="_blank"
                 rel="noreferrer noopener"
                 className="font-medium text-brand underline underline-offset-2"
               >
-                Gemini API key documentation
+                Groq API keys documentation
               </a>
               .
             </p>

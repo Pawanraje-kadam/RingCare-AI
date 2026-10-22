@@ -190,8 +190,8 @@ export function TimelineClient() {
       setPage(1);
       toast({
         title:
-          response.interpretedBy === "gemini"
-            ? "Search interpreted by Gemini"
+          response.interpretedBy === "groq"
+            ? "Search interpreted by Groq"
             : "Search interpreted locally",
         description: `${response.result.matches.length} matching event${
           response.result.matches.length === 1 ? "" : "s"
@@ -266,7 +266,7 @@ export function TimelineClient() {
                 />
               </div>
               <p id="event-search-hint" className="mt-1.5 text-[11px] leading-4 text-muted">
-                Interpreted by Gemini when available, otherwise by a local deterministic
+                Interpreted by Groq when available, otherwise by a local deterministic
                 parser. Search never reads or writes anything outside this demo.
               </p>
             </div>
@@ -301,17 +301,17 @@ export function TimelineClient() {
           </div>
 
           {warning ? (
-            <Callout tone="warning" title="Search ran without Gemini">
+            <Callout tone="warning" title="Search ran without Groq">
               {warning}
             </Callout>
           ) : null}
 
           {interpretation ? (
             <div className="flex flex-wrap items-center gap-2 rounded-lg border border-line bg-surface-2 px-3 py-2">
-              <Badge tone={interpretation.interpretedBy === "gemini" ? "brand" : "neutral"}>
+              <Badge tone={interpretation.interpretedBy === "groq" ? "brand" : "neutral"}>
                 <Sparkles aria-hidden="true" className="size-3" />
-                {interpretation.interpretedBy === "gemini"
-                  ? "Interpreted by Gemini"
+                {interpretation.interpretedBy === "groq"
+                  ? "Interpreted by Groq"
                   : "Interpreted locally"}
               </Badge>
               <p className="min-w-0 flex-1 text-[11.5px] leading-5 text-muted">

@@ -9,13 +9,14 @@ export const metadata: Metadata = {
     template: "%s · RingCare AI",
   },
   description:
-    "RingCare AI turns simulated smart-home events into calm, grounded explanations with deterministic rules and optional Google Gemini analysis.",
+    "RingCare AI turns simulated smart-home events into calm, grounded explanations with deterministic rules and optional Groq analysis.",
   applicationName: "RingCare AI",
   keywords: [
     "smart home",
     "doorbell",
     "event intelligence",
-    "Gemini",
+    "Groq",
+    "Llama 3.3",
     "caregiver",
     "home awareness",
   ],

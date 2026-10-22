@@ -74,10 +74,14 @@ export function EventRow({
                 </span>
               </>
             ) : null}
-            {event.analysis?.source === "gemini" ? (
+            {event.analysis?.source === "groq" ? (
               <>
                 <span aria-hidden="true">·</span>
-                <span>Gemini explanation</span>
+                <span>
+                  {event.analysis.model
+                    ? `Explained by ${event.analysis.model}`
+                    : "Explained by Llama 3.3 70B"}
+                </span>
               </>
             ) : event.processingStatus === "received" ? (
               <>

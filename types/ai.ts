@@ -1,7 +1,7 @@
 import type { AttentionLevel, EventType, FallbackReason } from "@/lib/constants/events";
 
 export interface AiResponseMeta {
-  mode: "gemini" | "fallback";
+  mode: "groq" | "fallback";
   reason?: FallbackReason;
   message?: string;
   /** Short, safe provider diagnostic (HTTP status / schema issue). No secrets. */
@@ -12,7 +12,7 @@ export interface AiResponseMeta {
 }
 
 export interface AiAnalysisMeta {
-  mode: "gemini" | "fallback";
+  mode: "groq" | "fallback";
   reason?: FallbackReason;
   message?: string;
   detail?: string;
@@ -53,7 +53,7 @@ export interface SummaryNarrative {
   patterns: string[];
   reviewItems: string[];
   limitations: string[];
-  source: "gemini" | "fallback";
+  source: "groq" | "fallback";
   model?: string;
   notice?: string;
 }
@@ -108,7 +108,7 @@ export interface InsightNarrative {
   headline: string;
   observations: string[];
   limitations: string[];
-  source: "gemini" | "fallback";
+  source: "groq" | "fallback";
   model?: string;
   notice?: string;
 }
@@ -132,17 +132,17 @@ export type AiHealthVerification =
 
 export interface AiHealth {
   configured: boolean;
-  provider: "Google Gemini";
+  provider: "Groq";
   model: string;
   modelLabel: string;
   promptVersion: string;
-  /** True only when Gemini answered a metadata request with this key. */
+  /** True only when Groq accepted this key during verification. */
   credentialsVerified: boolean;
   verificationStatus: AiHealthVerification;
   verificationMessage?: string;
   /** Which server-side env var supplied the key (name only). */
-  keySource?: "GEMINI_API_KEY" | "GOOGLE_API_KEY" | null;
-  /** Set when GEMINI_MODEL could not be honoured (the app is pinned to 3.8 Flash). */
+  keySource?: "GROQ_API_KEY" | null;
+  /** Set when GROQ_MODEL was invalid and the default model is in use. */
   modelNotice?: string;
   latencyMs?: number;
   checkedAt: string;

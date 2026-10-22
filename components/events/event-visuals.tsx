@@ -104,12 +104,12 @@ export function AiSourceBadge({
       </Badge>
     );
   }
-  if (source === "gemini") {
+  if (source === "groq") {
     return (
       <span title={cached ? "Served from the server's short-lived in-memory cache." : undefined}>
         <Badge tone="brand" className={className}>
           <Sparkles aria-hidden="true" className="size-3" />
-          {cached ? "Gemini cached" : "Gemini explanation"}
+          {cached ? "Llama 3.3 70B · cached" : "Llama 3.3 70B"}
         </Badge>
       </span>
     );
@@ -153,6 +153,6 @@ export function EventTypeLabel({
 }
 
 export const AI_SOURCE_LABEL: Record<(typeof AI_SOURCES)[number], string> = {
-  gemini: "Gemini",
+  groq: "Groq · Llama 3.3 70B",
   fallback: "Deterministic rules",
 };
