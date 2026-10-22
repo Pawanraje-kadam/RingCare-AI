@@ -1,7 +1,7 @@
 import { Cpu, Sparkles, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { AiResponseMeta } from "@/types/ai";
-import { SAFE_AI_MESSAGES } from "@/lib/constants/ai";
+import { AI_FALLBACK_HINTS, SAFE_AI_MESSAGES } from "@/lib/constants/ai";
 
 export function AiSourceNotice({
   meta,
@@ -36,6 +36,8 @@ export function AiSourceNotice({
     );
   }
 
+  const hint = meta.reason ? AI_FALLBACK_HINTS[meta.reason] : undefined;
+
   return (
     <div className={className}>
       <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-muted">
@@ -51,7 +53,13 @@ export function AiSourceNotice({
           {meta.message ??
             (meta.reason ? SAFE_AI_MESSAGES[meta.reason] : "Generated locally without AI.")}
         </span>
+        {meta.detail ? (
+          <span className="font-mono text-[10px] text-muted">({meta.detail})</span>
+        ) : null}
       </div>
+      {hint ? (
+        <p className="mt-1 text-[10px] leading-4 text-muted">{hint}</p>
+      ) : null}
     </div>
   );
 }

@@ -37,7 +37,8 @@ import {
   type EventType,
 } from "@/lib/constants/events";
 import { SETTINGS_LIMITS } from "@/lib/constants/settings";
-import { AI_LIMITS, DEFAULT_GEMINI_MODEL } from "@/lib/constants/ai";
+import { AI_LIMITS, DEFAULT_GEMINI_MODEL, GEMINI_MODEL_ID } from "@/lib/constants/ai";
+import { describeAiHealth } from "@/lib/ai/health-display";
 import { cn } from "@/lib/utils/cn";
 import type { AppSettings } from "@/types/settings";
 
@@ -255,7 +256,7 @@ export default function SettingsPage() {
     });
   };
 
-  const configured = Boolean(aiHealth?.configured);
+  const health = describeAiHealth(aiHealth, aiHealthStatus, draft.aiEnabled);
 
   return (
     <form onSubmit={handleSave} noValidate className="space-y-5 animate-fade-up">
@@ -503,15 +504,7 @@ export default function SettingsPage() {
                   <KeyRound aria-hidden="true" className="size-3.5 text-muted" />
                   Server configuration
                 </p>
-                {aiHealthStatus === "checking" ? (
-                  <Badge tone="neutral">Checking</Badge>
-                ) : aiHealthStatus === "unreachable" ? (
-                  <Badge tone="review">Unreachable</Badge>
-                ) : configured ? (
-                  <Badge tone="brand">Key present</Badge>
-                ) : (
-                  <Badge tone="review">Not configured</Badge>
-                )}
+                <Badge tone={health.tone}>{health.label}</Badge>
               </div>
               <dl className="mt-2.5 space-y-1.5 text-[10.5px]">
                 <div className="flex justify-between gap-2">
@@ -522,6 +515,22 @@ export default function SettingsPage() {
                   <dt className="text-muted">Model</dt>
                   <dd className="text-right font-mono text-ink-2">
                     {aiHealth?.model ?? DEFAULT_GEMINI_MODEL}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Connection</dt>
+                  <dd className="text-right text-ink-2">
+                    {health.verified
+                      ? `Verified${aiHealth?.latencyMs !== undefined ? ` · ${aiHealth.latencyMs} ms` : ""}`
+                      : health.usable
+                        ? "Unverified"
+                        : "Not verified"}
+                  </dd>
+                </div>
+                <div className="flex justify-between gap-2">
+                  <dt className="text-muted">Key variable</dt>
+                  <dd className="text-right font-mono text-ink-2">
+                    {aiHealth?.keySource ?? "not found"}
                   </dd>
                 </div>
                 <div className="flex justify-between gap-2">
@@ -537,19 +546,27 @@ export default function SettingsPage() {
                   </dd>
                 </div>
               </dl>
+              <p className="mt-2.5 text-[10.5px] leading-5 text-ink-2">
+                {health.detail}
+              </p>
+              {aiHealth?.modelNotice ? (
+                <p className="mt-1 text-[10.5px] leading-5 text-amber">
+                  {aiHealth.modelNotice}
+                </p>
+              ) : null}
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
                 className="mt-2.5"
-                onClick={() => void refreshAiHealth()}
+                onClick={() => void refreshAiHealth(true)}
                 disabled={aiHealthStatus === "checking"}
               >
                 <RefreshCw
                   aria-hidden="true"
                   className={cn("size-3.5", aiHealthStatus === "checking" && "animate-spin")}
                 />
-                Refresh status
+                Test connection
               </Button>
             </div>
 
@@ -560,8 +577,10 @@ export default function SettingsPage() {
                   server-only environment variable.
                 </li>
                 <li>
-                  Optionally set <code className="font-mono text-[10.5px]">GEMINI_MODEL</code>{" "}
-                  (default <span className="font-mono text-[10.5px]">{DEFAULT_GEMINI_MODEL}</span>).
+                  RingCare AI is pinned to{" "}
+                  <code className="font-mono text-[10.5px]">{GEMINI_MODEL_ID}</code>. A{" "}
+                  <code className="font-mono text-[10.5px]">GEMINI_MODEL</code> value that names
+                  a different model is ignored.
                 </li>
                 <li>
                   The key is read only in server API routes. It is never included in client
@@ -570,8 +589,8 @@ export default function SettingsPage() {
               </ol>
             </Callout>
             <p className="text-[10.5px] leading-5 text-muted">
-              “Key present” only means the variable exists. It does not verify validity,
-              quota, or network access; Gemini may still fail and fall back.{" "}
+              The connection check calls Gemini’s free model-metadata endpoint with your
+              server-side key, so it verifies validity without spending generation tokens.{" "}
               <a
                 href="https://ai.google.dev/gemini-api/docs/api-key"
                 target="_blank"

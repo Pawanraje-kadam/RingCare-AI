@@ -97,8 +97,10 @@ result is clearly labelled.
 
 ### API and safety layer
 
-- **Health endpoint** at `GET /api/health` reporting service status, demo mode, active
-  model, prompt version, and whether a key is present — never the key itself.
+- **Health endpoint** at `GET /api/health` reporting service status, demo mode, the
+  pinned model, prompt version, which env var supplied the key, and a real
+  `verificationStatus` from Gemini's free model-metadata endpoint (cached five minutes;
+  `?refresh=1` forces a check) — never the key itself.
 - **Server-side Gemini integration** with `@google/genai`, constrained JSON response
   schemas, a second Zod validation pass, prompt-injection delimiters, safety guardrails,
   bounded input sizes, timeouts, and deterministic fallbacks.
@@ -166,12 +168,34 @@ For search, Gemini can only choose allow-listed fields and enum values. The app 
 executes the validated plan **against its own local records**; no model-generated SQL,
 shell command, URL, or arbitrary instruction is executed.
 
+### Model and thinking settings
+
+- **The app is pinned to `gemini-3.8-flash`.** The identifier lives in
+  `lib/constants/ai.ts` and is used by every route, the health check, the settings page,
+  and the tests. `GEMINI_MODEL` may repeat the same identifier (with or without a
+  `models/` prefix, and in display-name form), but a value naming a different model is
+  ignored and reported in Settings.
+- **Thinking is set to `low`.** Gemini 3.8 Flash thinks at `medium` by default and rejects
+  `minimal`. Medium thinking adds latency and consumes the output-token budget, which is a
+  common cause of empty or truncated JSON on small structured tasks. `thinkingLevel: LOW`
+  keeps responses fast and within the output budget.
+- **Output budgets** are intentionally larger than the JSON payloads (`2048` tokens for
+  narration, `1024` for search) because thinking tokens count toward the same budget.
+- **Temperature is left at the model default.** Google advises against very low
+  temperatures on Gemini 3 thinking models.
+
 ### Every result is labelled
 
-AI responses carry `meta.mode` (`gemini` or `fallback`), an optional safe reason, model,
-cache status, and timestamp. UI badges and notices display whether content came from
-Gemini, the short-lived server cache, or deterministic rules. The app never claims AI was
-used when a fallback produced the text.
+AI responses carry `meta.mode` (`gemini` or `fallback`), an optional safe reason, an
+optional short diagnostic (`meta.detail`, for example `HTTP 401 · API key not valid`),
+model, cache status, and timestamp. UI badges and notices display whether content came
+from Gemini, the short-lived server cache, or deterministic rules. The app never claims AI
+was used when a fallback produced the text.
+
+If a schema-valid answer fails a semantic check (wrong attention level, an unsupported
+count, or a prohibited claim), the server retries **once** with a corrective instruction
+before falling back. Auth, quota, timeout, and network failures are never retried
+blindly.
 
 ### Fallback behavior
 
@@ -239,22 +263,45 @@ npm start
 | Variable | Required | Scope | Purpose |
 | --- | --- | --- | --- |
 | `GEMINI_API_KEY` | No | Server only | Google Gemini API key. Absent/empty → deterministic rules-only mode. |
-| `GEMINI_MODEL` | No | Server only | Bare Gemini model identifier. Defaults to `gemini-3.8-flash`. |
+| `GOOGLE_API_KEY` | No | Server only | Accepted as a fallback name when `GEMINI_API_KEY` is empty (the official SDK supports both). |
+| `GEMINI_MODEL` | No | Server only | Optional confirmation of the pinned `gemini-3.8-flash` model. Cannot switch the app to another model. |
 
 Rules:
 
 - **Never** rename these to `NEXT_PUBLIC_*`. Anything with that prefix is bundled into
   browser JavaScript and would expose the key.
 - `.env.local` is git-ignored. `.env.example` contains placeholders only.
+- Pasted values are normalized: surrounding quotes, a leading `Bearer`, and embedded
+  whitespace/newlines are removed before use.
 - The key is read only in `lib/ai/gemini.ts` on the server. It is never returned by an
-  API, stored in an event, written to a log, or rendered in Settings.
-- An invalid `GEMINI_MODEL` **syntax** falls back to the default model. A syntactically
-  valid but unavailable model is not detected by `/api/health`; the first AI request will
-  fail and fall back. Verify the current model list:
-  <https://ai.google.dev/gemini-api/docs/models>.
+  API, stored in an event, written to a log, or rendered in Settings. Provider messages
+  are sanitized (keys are redacted) before they reach the UI.
+- The app is pinned to `gemini-3.8-flash`. A `GEMINI_MODEL` value naming a different model
+  is ignored, and Settings shows a notice explaining that.
+- **On Vercel, adding or changing an environment variable requires a redeploy.** Existing
+  deployments keep their original environment.
 - Free-tier availability and quotas vary by model and project. Check
   <https://aistudio.google.com/rate-limit>. Rate limits apply per Google Cloud project,
   not per key.
+
+### Verifying the key
+
+`/api/health` reports whether a key is configured **and** whether Gemini accepts it. When a
+key exists, the server calls Gemini's free model-metadata endpoint (`models.get`) with a
+short timeout and caches the result for five minutes. It does not spend generation tokens.
+
+| `verificationStatus` | Meaning | What to do |
+| --- | --- | --- |
+| `ok` | Gemini answered; the key and model are usable. | Nothing. |
+| `not_configured` | No key variable was found. | Add `GEMINI_API_KEY` and redeploy. |
+| `invalid_key` | HTTP 401/403 — Gemini rejected the key. | Replace the key, then redeploy. |
+| `model_unavailable` | HTTP 404 for `gemini-3.8-flash`. | Check the key's project access. |
+| `quota` | HTTP 429 — project quota or rate limit. | Wait or raise the project quota. |
+| `unreachable` | Network/timeout while contacting Gemini. | Check outbound access. |
+| `error` | Any other provider error. | Inspect the sanitized message. |
+
+The same information appears in **Settings → AI analysis** with a **Test connection**
+button (`GET /api/health?refresh=1`), in the header chip, and on the overview card.
 
 ---
 
@@ -315,7 +362,7 @@ Rules:
 
 | Route | Method | Limit | Notes |
 | --- | --- | --- | --- |
-| `/api/health` | `GET` | — | Configuration/status only. Never exposes secrets. |
+| `/api/health` | `GET` | — | Configuration/status plus credential verification (`?refresh=1` bypasses the 5-minute cache). Never exposes secrets. |
 | `/api/ai/analyze` | `POST` | 12/min | One event + up to 10 context digests. |
 | `/api/ai/summary` | `POST` | 12/min | Up to 120 events, 90-day range. |
 | `/api/ai/insights` | `POST` | 12/min | Up to 180 events across two windows. |
@@ -419,7 +466,14 @@ Coverage includes:
 - API behavior without a key: health honesty, summary fallback, analyze fallback, invalid
   bodies, wrong content types, and disabled AI;
 - dashboard hydration, seeded data, simulated event creation, timeline local search, and
-  settings validation/persistence.
+  settings validation/persistence;
+- Gemini request shape (pinned model, `thinkingLevel: "low"`, output budget, no
+  temperature), credential normalization and `GOOGLE_API_KEY` fallback, ignored model
+  overrides, credential verification outcomes (`ok`, `invalid_key`, `model_unavailable`,
+  `quota`), and safe provider details;
+- Gemini narration success paths for analysis, summary, search, and insights, including
+  one corrective retry after a schema/semantic rejection and a deterministic fallback
+  after repeated unsafe claims.
 
 ### Verified in this workspace
 
@@ -427,7 +481,7 @@ At the time of writing this README, the following commands were actually run:
 
 - `npm run lint` — passed with no errors or warnings.
 - `npx tsc --noEmit` — passed.
-- `npm test` — 7 test files, **54 tests passed**.
+- `npm test` — 11 test files, **77 tests passed**.
 - `npm run build` — production build succeeded (Next.js 15.5.28), with static dashboard
   pages and dynamic API routes.
 - `npm run dev -- --hostname 0.0.0.0` — started successfully; `/`, `/dashboard`,
@@ -436,13 +490,22 @@ At the time of writing this README, the following commands were actually run:
   `GET /api/health` returned `configured: false` with the expected model and prompt
   version in rules-only mode.
 - `POST /api/demo` — returned a valid simulated seed dataset.
+- `npm start` (production build) with a local mock of the Gemini REST API — `/api/health`
+  reported `verificationStatus: "ok"` with a measured latency, and all four AI routes
+  (`summary`, `analyze`, `search`, `insights`) returned `mode: "gemini"`. The captured
+  request contained `thinkingConfig: { thinkingLevel: "LOW" }`, `maxOutputTokens: 2048`,
+  and no temperature override.
+- The same production server with the mock returning HTTP 401 — health reported
+  `invalid_key` with the actionable message, and AI routes fell back with a safe
+  `meta.detail` such as `HTTP 401 · API key not valid. Please pass a valid API key.`
 
-**Not verified here:** live Gemini calls, because no `GEMINI_API_KEY` is available in this
-environment. The Gemini path is covered by schema/guardrail/fallback tests and code
-review, but a real key must be used to verify account access, model availability, quota,
-and latency in your deployment. Visual browser testing was limited to jsdom interaction
-tests and server-rendered response checks; no screenshot-based visual regression suite is
-included.
+**Not verified here:** calls against Google's live service, because no real
+`GEMINI_API_KEY` exists in this environment. The request/response path was verified
+end-to-end with the real `@google/genai` client pointed at a local mock of the documented
+REST API (`GOOGLE_GEMINI_BASE_URL`), and the same code path is covered by unit tests.
+Account access, live quota, and real-world latency still need a real key in your
+deployment. Visual browser testing was limited to jsdom interaction tests and
+server-rendered response checks; no screenshot-based visual regression suite is included.
 
 ---
 
@@ -464,18 +527,25 @@ or database.
 5. Under **Settings → General**, use **Node.js 20.x or newer** (22.x recommended).
 6. Under **Settings → Environment Variables**, add for **Production, Preview, and
    Development** as appropriate:
-   - `GEMINI_API_KEY` = your key (mark it sensitive; do not select “Expose to browser”)
-   - `GEMINI_MODEL` = optional, e.g. `gemini-3.8-flash`
+   - `GEMINI_API_KEY` = your key (mark it sensitive; do not select “Expose to browser”).
+     `GOOGLE_API_KEY` also works if you prefer that name; leave the other one empty.
+   - `GEMINI_MODEL` = optional confirmation of `gemini-3.8-flash`; it cannot switch models.
    - Do **not** create any `NEXT_PUBLIC_GEMINI_*` variable.
 7. Click **Deploy**.
-8. After deployment:
-   - open `https://<your-project>.vercel.app/api/health` and check `ai.configured` is
-     `true` if you set a key; `credentialsVerified` is always `false` because health does
-     not spend a Gemini request;
-   - open the dashboard and request a summary/explanation;
-   - confirm the UI labels the result as Gemini or fallback.
-9. Redeploy after changing environment variables. Changing a Vercel env var does not
-   mutate an already-built deployment.
+8. After deployment, verify the key before judging the app:
+   - open `https://<your-project>.vercel.app/api/health` and check
+     `ai.verificationStatus` is `"ok"` and `ai.credentialsVerified` is `true`;
+   - or open **Settings → AI analysis** and press **Test connection** (this calls
+     `/api/health?refresh=1` and forces a fresh check);
+   - if the status is `invalid_key`, `model_unavailable`, `quota`, or `unreachable`, the
+     message tells you exactly which step failed;
+   - then request a summary or explanation and confirm the badge says Gemini-generated.
+9. **Redeploy after any environment-variable change.** Adding a variable in Vercel does
+   not update deployments that are already built. This is the most common reason a key
+   appears to be ignored.
+10. If you rename or rotate the key, repeat step 8 — a verified key is cached in the
+    server instance for five minutes, and a built deployment keeps its old environment
+    until it is redeployed.
 
 ### CLI flow
 
@@ -520,17 +590,45 @@ Before exposing this to real users or real data, add:
 
 ### “Rules-only” badge / `configured: false`
 
-- `GEMINI_API_KEY` is missing in the running environment. Create `.env.local` for local
-  development (or set the Vercel variable) and restart/redeploy.
-- Check that the variable is not named `NEXT_PUBLIC_GEMINI_API_KEY`.
-- `/api/health` intentionally does not validate the key, only its presence.
+- No key variable was found in the running environment. Set `GEMINI_API_KEY` (or
+  `GOOGLE_API_KEY`) and **redeploy** — Vercel does not inject new variables into an
+  existing deployment.
+- Check that the variable is not named `NEXT_PUBLIC_GEMINI_API_KEY` (that name is exposed
+  to the browser and is deliberately not read by the server).
+- Settings now shows which variable supplied the key (`Key variable` row).
+
+### Key is set but every result is a fallback
+
+This was the most common failure mode before the current release. Work through it in order:
+
+1. **Redeploy.** A deployment built before the variable was added will never see it.
+2. Open **Settings → AI analysis → Test connection**. The badge and message identify the
+   problem: `invalid_key` (401/403), `model_unavailable` (404), `quota` (429),
+   `unreachable` (network), or `ok`.
+3. Read the fallback notice on the event/summary. It now includes a safe
+   `meta.detail`, e.g. `HTTP 401 · API key not valid`, plus a deployment hint.
+4. Check that the key is pasted cleanly. Surrounding quotes, a leading `Bearer`, and
+   embedded whitespace/newlines are stripped automatically, but a truncated key cannot be
+   repaired.
+5. Confirm the app is pinned to `gemini-3.8-flash`; if `GEMINI_MODEL` names a different
+   model, Settings shows a notice that the value was ignored.
+6. Quota: Gemini limits apply per Google Cloud project, not per key. See
+   <https://aistudio.google.com/rate-limit>.
+
+The Gemini 3.x family thinks by default. This app sends `thinkingLevel: "low"` because
+medium thinking can consume the output budget and produce empty JSON on short structured
+tasks; if you fork the code and remove it, raise `maxOutputTokens` and the timeouts
+accordingly.
 
 ### Explanations say Gemini was unavailable
 
 - Inspect the badge and message on the event or summary. `timeout`, `rate_limited`,
-  `provider_error`, `invalid_response`, and `unsafe_response` are distinct reasons.
-- A model that is syntactically valid but not enabled for your account/project will fail
-  at request time and fall back.
+  `provider_error`, `invalid_response`, and `unsafe_response` are distinct reasons, and
+  `meta.detail` carries the sanitized provider status.
+- `unsafe_response` means the model's wording claimed identity, intent, danger, or
+  reassurance beyond the evidence. The server retries once with a correction, then falls
+  back rather than showing the claim.
+- `invalid_response` usually means truncated JSON (output budget) or a schema mismatch.
 - Verify current model IDs and free-tier availability:
   <https://ai.google.dev/gemini-api/docs/models>.
 - Check quota and per-project limits at <https://aistudio.google.com/rate-limit>.
@@ -596,8 +694,10 @@ This is a demonstration, not a validated safety, security, medical, or caregivin
 - **No authentication or authorization.** Anyone with the deployment URL can use its
   browser-local demo.
 - **Rate limits are per instance** and not a production abuse control.
-- **Live Gemini access was not verified in this environment** (no API key). Key validity,
-  model availability, quota, and latency must be verified in your deployment.
+- **The live Google endpoint was not exercised in this environment** (no real API key).
+  The full request/response path was verified with the real `@google/genai` client against
+  a local mock of the documented REST API; key validity, model access, live quota, and
+  real latency must still be confirmed in your deployment (Settings → Test connection).
 - **Model availability changes.** The default `gemini-3.8-flash` was chosen as a current
   Flash model with free-tier access at the time of development. Re-check Google’s current
   model and pricing documentation before relying on it.

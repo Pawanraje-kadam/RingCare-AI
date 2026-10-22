@@ -6,11 +6,18 @@ export const dynamic = "force-dynamic";
 
 /**
  * Safe health/configuration endpoint.
- * It reports whether a key is present configuration-wise. It does NOT verify the
- * key's validity or the account's current quota.
+ *
+ * Reports whether a key is configured and — because a present key is not proof
+ * that Gemini will accept it — verifies the key against Gemini's free model
+ * metadata endpoint. Results are cached per instance for five minutes; pass
+ * `?refresh=1` (used by the Settings "Test connection" button) to force a new
+ * check. The key itself is never returned, logged, or included in any message.
  */
-export async function GET() {
-  const ai = getAiHealth();
+export async function GET(request: Request) {
+  const url = new URL(request.url);
+  const refresh = url.searchParams.get("refresh") === "1";
+  const ai = await getAiHealth({ refresh });
+
   return jsonResponse({
     status: "ok",
     service: "ringcare-ai",
@@ -18,13 +25,7 @@ export async function GET() {
     demoMode: true,
     eventSource: "simulated_ring",
     storage: "browser_local",
-    ai: {
-      configured: ai.configured,
-      provider: ai.provider,
-      model: ai.model,
-      promptVersion: ai.promptVersion,
-      credentialsVerified: false,
-    },
+    ai,
     checkedAt: new Date().toISOString(),
   });
 }

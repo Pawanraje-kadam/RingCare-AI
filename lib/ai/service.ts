@@ -1,5 +1,12 @@
 import "server-only";
-import { AI_LIMITS, PROMPT_VERSION, SAFE_AI_MESSAGES } from "@/lib/constants/ai";
+import type { ZodType } from "zod";
+import {
+  AI_LIMITS,
+  GEMINI_MODEL_ID,
+  GEMINI_MODEL_LABEL,
+  PROMPT_VERSION,
+  SAFE_AI_MESSAGES,
+} from "@/lib/constants/ai";
 import type { FallbackReason } from "@/lib/constants/events";
 import { computeInsightFacts, computeSummaryFacts } from "@/lib/analytics/facts";
 import { createFallbackAnalysis, createFallbackInsight, createFallbackSummary } from "@/lib/ai/fallback";
@@ -8,7 +15,16 @@ import {
   findUnsupportedCountClaim,
   scanNarrativeSafety,
 } from "@/lib/ai/guardrails";
-import { createGeminiClient, generateStructured, GeminiRequestError, readGeminiConfig, type GeminiJsonClient } from "@/lib/ai/gemini";
+import {
+  classifyGeminiError,
+  createGeminiClient,
+  generateStructured,
+  GeminiRequestError,
+  logGeminiFailure,
+  readGeminiConfig,
+  verifyGeminiAccess,
+  type GeminiJsonClient,
+} from "@/lib/ai/gemini";
 import {
   buildEventInterpretationPrompt,
   buildInsightPrompt,
@@ -84,12 +100,14 @@ function makeFallbackMeta(
   now: Date,
   message?: string,
   cached = false,
+  detail?: string,
 ): AiResponseMeta {
   const resolvedMessage = message ?? (reason ? SAFE_AI_MESSAGES[reason] : undefined);
   return {
     mode: "fallback",
     ...(reason ? { reason } : {}),
     ...(resolvedMessage ? { message: resolvedMessage } : {}),
+    ...(detail ? { detail } : {}),
     cached,
     generatedAt: now.toISOString(),
   };
@@ -111,18 +129,103 @@ function resolveClient(explicit?: GeminiJsonClient): GeminiJsonClient | null {
   return createGeminiClient({ apiKey: runtime.apiKey, model: runtime.model });
 }
 
-function getHealth(): AiHealth {
+/**
+ * Health/configuration snapshot. When a key is present, this verifies it with
+ * Gemini's free model-metadata endpoint (cached per instance) so the UI can
+ * distinguish "key present" from "Gemini actually accepts this key".
+ */
+export async function getHealth(
+  options: { refresh?: boolean } = {},
+): Promise<AiHealth> {
   const config = readGeminiConfig();
+  const verification = await verifyGeminiAccess(config, {
+    force: options.refresh,
+  });
   return {
     configured: config.configured,
     provider: "Google Gemini",
     model: config.model,
+    modelLabel: GEMINI_MODEL_LABEL,
     promptVersion: PROMPT_VERSION,
-    checkedAt: new Date().toISOString(),
+    credentialsVerified: verification.status === "ok",
+    verificationStatus: verification.status,
+    verificationMessage: verification.message,
+    keySource: config.keySource,
+    ...(config.ignoredModelEnv
+      ? {
+          modelNotice: `GEMINI_MODEL="${config.ignoredModelEnv}" was ignored. RingCare AI is pinned to ${GEMINI_MODEL_ID}.`,
+        }
+      : {}),
+    ...(verification.latencyMs !== undefined
+      ? { latencyMs: verification.latencyMs }
+      : {}),
+    checkedAt: verification.checkedAt,
   };
 }
 
 export const getAiHealth = getHealth;
+
+const CORRECTION_INSTRUCTION = `
+
+CORRECTION IMPORTANT: Your previous answer was rejected. Return ONE JSON object that
+matches the schema exactly. Use only the supplied facts. Never state identity, criminality,
+danger, an emergency, monitoring, or reassurance. Every number must appear in the facts.
+The attentionLevel must exactly equal the deterministic rule level supplied above.`;
+
+interface ValidatedGenerationOptions<T> {
+  client: GeminiJsonClient;
+  systemInstruction: string;
+  responseSchema: Record<string, unknown>;
+  schema: ZodType<T>;
+  timeoutMs: number;
+  maxOutputTokens: number;
+  buildPrompt: () => string;
+  /** Throw a GeminiRequestError to reject an otherwise schema-valid result. */
+  validate?: (value: T) => void;
+}
+
+/**
+ * Generate, validate, and — when the model produced schema-valid JSON that
+ * failed a semantic check — retry exactly once with a corrective instruction.
+ * Transport and auth failures are never retried here.
+ */
+async function generateValidated<T>({
+  client,
+  systemInstruction,
+  responseSchema,
+  schema,
+  timeoutMs,
+  maxOutputTokens,
+  buildPrompt,
+  validate,
+}: ValidatedGenerationOptions<T>): Promise<T> {
+  const attempt = async (correction?: string): Promise<T> => {
+    const value = await generateStructured({
+      client,
+      systemInstruction,
+      userPrompt: `${buildPrompt()}${correction ?? ""}`,
+      responseSchema,
+      schema,
+      timeoutMs,
+      maxOutputTokens,
+    });
+    validate?.(value);
+    return value;
+  };
+
+  try {
+    return await attempt();
+  } catch (error) {
+    const classified = classifyGeminiError(error);
+    if (
+      classified.reason === "invalid_response" ||
+      classified.reason === "unsafe_response"
+    ) {
+      return attempt(CORRECTION_INSTRUCTION);
+    }
+    throw classified;
+  }
+}
 
 /* -------------------------------------------------------------------------- */
 /*                             Event interpretation                           */
@@ -156,7 +259,7 @@ export async function analyzeEvent({
     .map(digestToRuleEvent);
   const evaluation = evaluateEvent(event, ruleSettings, [event, ...related]);
 
-  const fallback = (reason: FallbackReason) => {
+  const fallback = (reason: FallbackReason, detail?: string) => {
     const analysis = createFallbackAnalysis({
       event,
       evaluation,
@@ -166,7 +269,7 @@ export async function analyzeEvent({
     });
     return {
       analysis,
-      meta: makeFallbackMeta(reason, now),
+      meta: makeFallbackMeta(reason, now, undefined, false, detail),
       evaluation,
     } satisfies AnalyzeEventResult;
   };
@@ -205,39 +308,41 @@ export async function analyzeEvent({
   }
 
   try {
-    const model = await generateStructured({
+    const model = await generateValidated({
       client,
       systemInstruction: EVENT_SYSTEM_PROMPT,
-      userPrompt: buildEventInterpretationPrompt({
-        event,
-        evaluation,
-        settings: ruleSettings,
-        relatedEvents: contextEvents,
-      }),
+      buildPrompt: () =>
+        buildEventInterpretationPrompt({
+          event,
+          evaluation,
+          settings: ruleSettings,
+          relatedEvents: contextEvents,
+        }),
       responseSchema: eventInterpretationResponseSchema,
       schema: eventInterpretationModelSchema,
       timeoutMs: AI_LIMITS.analyzeTimeoutMs,
-      maxOutputTokens: 1100,
-      temperature: 0.2,
+      maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
+      validate: (value) => {
+        const unsafe = scanNarrativeSafety([
+          value.summary,
+          value.eventInterpretation,
+          value.recommendedAction,
+          ...value.evidence,
+          ...value.uncertainty,
+          ...value.limitations,
+        ]);
+        if (unsafe) {
+          throw new GeminiRequestError("unsafe_response", `Unsafe narrative: ${unsafe}`);
+        }
+        if (value.attentionLevel !== evaluation.attentionLevel) {
+          throw new GeminiRequestError(
+            "invalid_response",
+            "Model attention level disagreed with deterministic rules",
+            { detail: `expected ${evaluation.attentionLevel}, received ${value.attentionLevel}` },
+          );
+        }
+      },
     });
-
-    const unsafe = scanNarrativeSafety([
-      model.summary,
-      model.eventInterpretation,
-      model.recommendedAction,
-      ...model.evidence,
-      ...model.uncertainty,
-      ...model.limitations,
-    ]);
-    if (unsafe) {
-      throw new GeminiRequestError("unsafe_response", `Unsafe narrative: ${unsafe}`);
-    }
-    if (model.attentionLevel !== evaluation.attentionLevel) {
-      throw new GeminiRequestError(
-        "invalid_response",
-        "Model attention level disagreed with deterministic rules",
-      );
-    }
 
     const analysis: AiAnalysis = {
       summary: model.summary,
@@ -266,11 +371,9 @@ export async function analyzeEvent({
       evaluation,
     };
   } catch (error) {
-    const classified =
-      error instanceof GeminiRequestError
-        ? error
-        : new GeminiRequestError("provider_error", "Unexpected AI failure");
-    return fallback(classified.reason);
+    const classified = classifyGeminiError(error);
+    logGeminiFailure("analyze", classified);
+    return fallback(classified.reason, classified.detail);
   }
 }
 
@@ -308,8 +411,8 @@ export async function generateDailySummary({
     timeZone,
   });
 
-  const fallback = (reason?: FallbackReason) =>
-    createFallbackSummary({ facts, reason, generatedAt: now });
+  const fallback = (reason?: FallbackReason, detail?: string) =>
+    createFallbackSummary({ facts, reason, generatedAt: now, detail });
 
   if (!settings.aiEnabled) return fallback("ai_disabled");
   const client = resolveClient(explicitClient);
@@ -350,60 +453,57 @@ export async function generateDailySummary({
   }
 
   try {
-    const model = await generateStructured({
+    const model = await generateValidated({
       client,
       systemInstruction: SUMMARY_SYSTEM_PROMPT,
-      userPrompt: buildSummaryPrompt({ facts, events }),
+      buildPrompt: () => buildSummaryPrompt({ facts, events }),
       responseSchema: summaryResponseSchema,
       schema: summaryNarrativeModelSchema,
       timeoutMs: AI_LIMITS.summaryTimeoutMs,
-      maxOutputTokens: 1100,
-      temperature: 0.25,
+      maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
+      validate: (value) => {
+        const combined = [
+          value.headline,
+          value.mainActivity,
+          ...value.patterns,
+          ...value.reviewItems,
+          ...value.limitations,
+        ].join("\n");
+
+        const unsafe = scanNarrativeSafety([
+          value.headline,
+          value.mainActivity,
+          ...value.patterns,
+          ...value.reviewItems,
+          ...value.limitations,
+        ]);
+        if (unsafe) {
+          throw new GeminiRequestError("unsafe_response", `Unsafe summary: ${unsafe}`);
+        }
+        const allowedCounts = [
+          facts.counts.total,
+          facts.counts.routine,
+          facts.counts.review,
+          facts.counts.highAttention,
+          facts.counts.uncertain,
+          facts.counts.deliveries,
+          facts.counts.caregiverArrivals,
+          facts.counts.unmatchedCaregiverArrivals,
+          ...Object.values(facts.counts.byType),
+          facts.reviewSamples.length,
+          facts.busiestHour?.count ?? 0,
+          facts.topLocation?.count ?? 0,
+        ];
+        const badCount = findUnsupportedCountClaim(combined, allowedCounts);
+        if (badCount) {
+          throw new GeminiRequestError("invalid_response", badCount);
+        }
+        const absence = findAbsenceContradiction(combined, facts.counts.total > 0);
+        if (absence) {
+          throw new GeminiRequestError("invalid_response", absence);
+        }
+      },
     });
-
-    const combined = [
-      model.headline,
-      model.mainActivity,
-      ...model.patterns,
-      ...model.reviewItems,
-      ...model.limitations,
-    ].join("\n");
-
-    const unsafe = scanNarrativeSafety([
-      model.headline,
-      model.mainActivity,
-      ...model.patterns,
-      ...model.reviewItems,
-      ...model.limitations,
-    ]);
-    if (unsafe) {
-      throw new GeminiRequestError("unsafe_response", `Unsafe summary: ${unsafe}`);
-    }
-    const allowedCounts = [
-      facts.counts.total,
-      facts.counts.routine,
-      facts.counts.review,
-      facts.counts.highAttention,
-      facts.counts.uncertain,
-      facts.counts.deliveries,
-      facts.counts.caregiverArrivals,
-      facts.counts.unmatchedCaregiverArrivals,
-      ...Object.values(facts.counts.byType),
-      facts.reviewSamples.length,
-      facts.busiestHour?.count ?? 0,
-      facts.topLocation?.count ?? 0,
-    ];
-    const badCount = findUnsupportedCountClaim(combined, allowedCounts);
-    if (badCount) {
-      throw new GeminiRequestError("invalid_response", badCount);
-    }
-    const absence = findAbsenceContradiction(
-      combined,
-      facts.counts.total > 0,
-    );
-    if (absence) {
-      throw new GeminiRequestError("invalid_response", absence);
-    }
 
     const limitations = Array.from(
       new Set([
@@ -430,11 +530,9 @@ export async function generateDailySummary({
       generatedAt: now.toISOString(),
     };
   } catch (error) {
-    const classified =
-      error instanceof GeminiRequestError
-        ? error
-        : new GeminiRequestError("provider_error", "Unexpected summary failure");
-    return fallback(classified.reason);
+    const classified = classifyGeminiError(error);
+    logGeminiFailure("summary", classified);
+    return fallback(classified.reason, classified.detail);
   }
 }
 
@@ -478,8 +576,13 @@ export async function generateActivityInsight({
     timeZone,
   });
 
-  const fallback = (reason?: FallbackReason) => {
-    const fallbackResult = createFallbackInsight({ facts, reason, generatedAt: now });
+  const fallback = (reason?: FallbackReason, detail?: string) => {
+    const fallbackResult = createFallbackInsight({
+      facts,
+      reason,
+      generatedAt: now,
+      detail,
+    });
     return {
       facts,
       narrative: fallbackResult.narrative,
@@ -513,49 +616,57 @@ export async function generateActivityInsight({
   }
 
   try {
-    const model = await generateStructured({
+    const model = await generateValidated({
       client,
       systemInstruction: INSIGHT_SYSTEM_PROMPT,
-      userPrompt: buildInsightPrompt(facts),
+      buildPrompt: () => buildInsightPrompt(facts),
       responseSchema: insightResponseSchema,
       schema: insightNarrativeModelSchema,
       timeoutMs: AI_LIMITS.insightsTimeoutMs,
-      maxOutputTokens: 900,
-      temperature: 0.25,
+      maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
+      validate: (value) => {
+        const combined = [value.headline, ...value.observations, ...value.limitations].join("\n");
+        const unsafe = scanNarrativeSafety([
+          value.headline,
+          ...value.observations,
+          ...value.limitations,
+        ]);
+        if (unsafe) {
+          throw new GeminiRequestError("unsafe_response", `Unsafe insight: ${unsafe}`);
+        }
+        const totalComparison = facts.comparisons.find((item) => item.id === "total");
+        if (/\bincreased\b/i.test(combined) && totalComparison?.direction !== "up") {
+          throw new GeminiRequestError("invalid_response", "Incorrect increase claim");
+        }
+        if (/\bdecreased\b/i.test(combined) && totalComparison?.direction !== "down") {
+          throw new GeminiRequestError("invalid_response", "Incorrect decrease claim");
+        }
+        const allowedCounts = [
+          ...facts.comparisons.flatMap((item) => [
+            item.current,
+            item.previous,
+            Math.abs(item.delta),
+          ]),
+          ...Object.values(facts.current.byType),
+          facts.current.total,
+          facts.current.routine,
+          facts.current.review,
+          facts.current.highAttention,
+          facts.current.uncertain,
+          facts.current.deliveries,
+          facts.current.caregiverArrivals,
+          facts.current.busiestHour?.count ?? 0,
+          facts.current.topLocation?.count ?? 0,
+        ];
+        const badCount = findUnsupportedCountClaim(combined, allowedCounts);
+        if (badCount) {
+          throw new GeminiRequestError("invalid_response", badCount);
+        }
+        if (findAbsenceContradiction(combined, facts.current.total > 0)) {
+          throw new GeminiRequestError("invalid_response", "Incorrect absence claim");
+        }
+      },
     });
-
-    const combined = [model.headline, ...model.observations, ...model.limitations].join("\n");
-    const unsafe = scanNarrativeSafety([model.headline, ...model.observations, ...model.limitations]);
-    if (unsafe) {
-      throw new GeminiRequestError("unsafe_response", `Unsafe insight: ${unsafe}`);
-    }
-    const totalComparison = facts.comparisons.find((item) => item.id === "total");
-    if (/\bincreased\b/i.test(combined) && totalComparison?.direction !== "up") {
-      throw new GeminiRequestError("invalid_response", "Incorrect increase claim");
-    }
-    if (/\bdecreased\b/i.test(combined) && totalComparison?.direction !== "down") {
-      throw new GeminiRequestError("invalid_response", "Incorrect decrease claim");
-    }
-    const allowedCounts = [
-      ...facts.comparisons.flatMap((item) => [item.current, item.previous, Math.abs(item.delta)]),
-      ...Object.values(facts.current.byType),
-      facts.current.total,
-      facts.current.routine,
-      facts.current.review,
-      facts.current.highAttention,
-      facts.current.uncertain,
-      facts.current.deliveries,
-      facts.current.caregiverArrivals,
-      facts.current.busiestHour?.count ?? 0,
-      facts.current.topLocation?.count ?? 0,
-    ];
-    const badCount = findUnsupportedCountClaim(combined, allowedCounts);
-    if (badCount) {
-      throw new GeminiRequestError("invalid_response", badCount);
-    }
-    if (findAbsenceContradiction(combined, facts.current.total > 0)) {
-      throw new GeminiRequestError("invalid_response", "Incorrect absence claim");
-    }
 
     const narrative: InsightNarrative = {
       headline: model.headline,
@@ -578,11 +689,9 @@ export async function generateActivityInsight({
       generatedAt: now.toISOString(),
     };
   } catch (error) {
-    const classified =
-      error instanceof GeminiRequestError
-        ? error
-        : new GeminiRequestError("provider_error", "Unexpected insight failure");
-    return fallback(classified.reason);
+    const classified = classifyGeminiError(error);
+    logGeminiFailure("insights", classified);
+    return fallback(classified.reason, classified.detail);
   }
 }
 
@@ -607,10 +716,13 @@ export async function interpretSearchQuery({
 }: SearchInterpretationInput): Promise<SearchInterpretation> {
   const localPlan = () => parseSearchQueryLocally(query, clientNow);
 
-  const local = (reason: FallbackReason | undefined): SearchInterpretation => ({
+  const local = (
+    reason: FallbackReason | undefined,
+    detail?: string,
+  ): SearchInterpretation => ({
     plan: localPlan(),
     interpretedBy: "rules",
-    meta: makeFallbackMeta(reason, now),
+    meta: makeFallbackMeta(reason, now, undefined, false, detail),
   });
 
   if (!aiEnabled) return local("ai_disabled");
@@ -618,26 +730,26 @@ export async function interpretSearchQuery({
   if (!client) return local("missing_api_key");
 
   try {
-    const model = await generateStructured({
+    const model = await generateValidated({
       client,
       systemInstruction: SEARCH_SYSTEM_PROMPT,
-      userPrompt: buildSearchPrompt({ query, clientNow }),
+      buildPrompt: () => buildSearchPrompt({ query, clientNow }),
       responseSchema: searchPlanResponseSchema,
       schema: searchPlanModelSchema,
       timeoutMs: AI_LIMITS.searchTimeoutMs,
-      maxOutputTokens: 500,
-      temperature: 0.1,
+      maxOutputTokens: AI_LIMITS.maxOutputTokensSearch,
+      validate: (value) => {
+        const unsafe = scanNarrativeSafety([
+          value.keyword,
+          value.clarifyingQuestion,
+          ...value.eventTypes,
+          ...value.locations,
+        ]);
+        if (unsafe) {
+          throw new GeminiRequestError("unsafe_response", "Unsafe search interpretation");
+        }
+      },
     });
-
-    const unsafe = scanNarrativeSafety([
-      model.keyword,
-      model.clarifyingQuestion,
-      ...model.eventTypes,
-      ...model.locations,
-    ]);
-    if (unsafe) {
-      throw new GeminiRequestError("unsafe_response", "Unsafe search interpretation");
-    }
 
     const plan: SearchPlan = {
       intent: model.intent,
@@ -664,16 +776,19 @@ export async function interpretSearchQuery({
       meta: makeGeminiMeta(client.model, now, false),
     };
   } catch (error) {
-    const classified =
-      error instanceof GeminiRequestError
-        ? error
-        : new GeminiRequestError("provider_error", "Unexpected search failure");
+    const classified = classifyGeminiError(error);
+    logGeminiFailure("search", classified);
     return {
       plan: localPlan(),
       interpretedBy: "rules",
       meta: {
-        ...makeFallbackMeta(classified.reason, now),
-        message: `${SAFE_AI_MESSAGES[classified.reason]} Search was interpreted locally instead.`,
+        ...makeFallbackMeta(
+          classified.reason,
+          now,
+          `${SAFE_AI_MESSAGES[classified.reason]} Search was interpreted locally instead.`,
+          false,
+          classified.detail,
+        ),
       },
     };
   }

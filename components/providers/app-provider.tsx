@@ -103,7 +103,7 @@ export interface AppContextValue {
   ) => Promise<DailySummary>;
   generateInsights: (range: AnalyticsRange) => Promise<ActivityInsight>;
   searchEvents: (query: string) => Promise<SearchRunResult>;
-  refreshAiHealth: () => Promise<void>;
+  refreshAiHealth: (refresh?: boolean) => Promise<void>;
   dismissStorageWarning: () => void;
 }
 
@@ -269,21 +269,32 @@ export function AppProvider({
 
   /* ------------------------------ AI health ------------------------------ */
 
-  const refreshAiHealth = React.useCallback(async () => {
+  const refreshAiHealth = React.useCallback(async (refresh = false) => {
     setAiHealthStatus("checking");
     try {
-      const raw = await getJson<unknown>("/api/health", { timeoutMs: 12_000 });
+      const raw = await getJson<unknown>(
+        refresh ? "/api/health?refresh=1" : "/api/health",
+        { timeoutMs: 12_000 },
+      );
       const parsed = healthResponseSchema.safeParse(raw);
       if (!parsed.success) {
         setAiHealth(null);
         setAiHealthStatus("unreachable");
         return;
       }
+      const ai = parsed.data.ai;
       setAiHealth({
-        configured: parsed.data.ai.configured,
-        provider: parsed.data.ai.provider,
-        model: parsed.data.ai.model,
-        promptVersion: parsed.data.ai.promptVersion,
+        configured: ai.configured,
+        provider: ai.provider,
+        model: ai.model,
+        modelLabel: ai.modelLabel,
+        promptVersion: ai.promptVersion,
+        credentialsVerified: ai.credentialsVerified,
+        verificationStatus: ai.verificationStatus,
+        ...(ai.verificationMessage ? { verificationMessage: ai.verificationMessage } : {}),
+        keySource: ai.keySource ?? null,
+        ...(ai.modelNotice ? { modelNotice: ai.modelNotice } : {}),
+        ...(ai.latencyMs !== undefined ? { latencyMs: ai.latencyMs } : {}),
         checkedAt: parsed.data.checkedAt,
       });
       setAiHealthStatus("ready");

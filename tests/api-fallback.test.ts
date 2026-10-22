@@ -52,7 +52,9 @@ afterEach(() => {
 
 describe("health route", () => {
   it("reports configuration without exposing credentials", async () => {
-    const response = await healthGET();
+    const response = await healthGET(
+      new Request("http://localhost/api/health?refresh=1"),
+    );
     expect(response.status).toBe(200);
     const body = (await response.json()) as Record<string, unknown>;
     expect(body.status).toBe("ok");
@@ -60,7 +62,12 @@ describe("health route", () => {
     const ai = body.ai as Record<string, unknown>;
     expect(ai.configured).toBe(false);
     expect(ai.credentialsVerified).toBe(false);
-    expect(JSON.stringify(body)).not.toMatch(/api[_-]?key/i);
+    expect(ai.verificationStatus).toBe("not_configured");
+    expect(ai.model).toBe("gemini-3.8-flash");
+    expect(ai.modelLabel).toBe("Gemini 3.8 Flash");
+    // Env var names may appear in guidance; key-shaped values must not.
+    expect(JSON.stringify(body)).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
+    expect(JSON.stringify(body)).not.toMatch(/secret|bearer/i);
   });
 });
 

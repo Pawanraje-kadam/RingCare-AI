@@ -205,6 +205,7 @@ export interface FallbackSummaryOptions {
   reason?: FallbackReason;
   generatedAt?: Date;
   notice?: string;
+  detail?: string;
 }
 
 export function createFallbackSummary({
@@ -212,6 +213,7 @@ export function createFallbackSummary({
   reason = "unknown",
   generatedAt = new Date(),
   notice,
+  detail,
 }: FallbackSummaryOptions): DailySummary {
   const needsReview = facts.counts.review + facts.counts.highAttention;
   const headline =
@@ -263,6 +265,7 @@ export function createFallbackSummary({
     mode: "fallback",
     reason,
     message: narrative.notice,
+    ...(detail ? { detail } : {}),
     cached: false,
     generatedAt: generatedAt.toISOString(),
   };
@@ -284,6 +287,7 @@ export interface FallbackInsightOptions {
   reason?: FallbackReason;
   generatedAt?: Date;
   notice?: string;
+  detail?: string;
 }
 
 export function createFallbackInsight({
@@ -291,6 +295,7 @@ export function createFallbackInsight({
   reason = "unknown",
   generatedAt = new Date(),
   notice,
+  detail,
 }: FallbackInsightOptions): {
   narrative: InsightNarrative;
   meta: AiResponseMeta;
@@ -343,6 +348,7 @@ export function createFallbackInsight({
     mode: "fallback",
     reason,
     message: narrative.notice,
+    ...(detail ? { detail } : {}),
     cached: false,
     generatedAt: generatedAt.toISOString(),
   };

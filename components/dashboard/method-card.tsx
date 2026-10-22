@@ -9,17 +9,19 @@ import {
   RefreshCw,
   Sparkles,
   X,
+  XCircle,
 } from "lucide-react";
 import { useApp } from "@/components/providers/app-provider";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AI_LIMITS } from "@/lib/constants/ai";
+import { describeAiHealth } from "@/lib/ai/health-display";
 import { cn } from "@/lib/utils/cn";
 
 export function MethodCard() {
   const { aiHealth, aiHealthStatus, refreshAiHealth, events, settings } = useApp();
-  const configured = aiHealth?.configured ?? false;
+  const health = describeAiHealth(aiHealth, aiHealthStatus, settings.aiEnabled);
 
   return (
     <Card>
@@ -66,27 +68,32 @@ export function MethodCard() {
               <KeyRound aria-hidden="true" className="size-3.5 text-muted" />
               Gemini status
             </p>
-            {aiHealthStatus === "checking" ? (
-              <Badge tone="neutral">Checking</Badge>
-            ) : aiHealthStatus === "unreachable" ? (
-              <Badge tone="review">
-                <X aria-hidden="true" className="size-3" />
-                Unreachable
-              </Badge>
-            ) : configured ? (
-              <Badge tone="brand">
+            <Badge tone={health.tone}>
+              {health.verified ? (
                 <Check aria-hidden="true" className="size-3" />
-                Key present
-              </Badge>
-            ) : (
-              <Badge tone="review">Not configured</Badge>
-            )}
+              ) : health.tone === "attention" ? (
+                <XCircle aria-hidden="true" className="size-3" />
+              ) : health.tone === "review" ? (
+                <X aria-hidden="true" className="size-3" />
+              ) : null}
+              {health.label}
+            </Badge>
           </div>
           <dl className="mt-2.5 space-y-1.5 text-[10.5px]">
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Model</dt>
               <dd className="text-right font-mono text-ink-2">
-                {aiHealth?.model ?? "Not reported"}
+                {aiHealth?.model ?? "gemini-3.8-flash"}
+              </dd>
+            </div>
+            <div className="flex justify-between gap-3">
+              <dt className="text-muted">Connection</dt>
+              <dd className="text-right text-ink-2">
+                {health.verified
+                  ? `Verified${aiHealth?.latencyMs !== undefined ? ` · ${aiHealth.latencyMs} ms` : ""}`
+                  : health.usable
+                    ? "Unverified"
+                    : "Not verified"}
               </dd>
             </div>
             <div className="flex justify-between gap-3">
@@ -103,14 +110,22 @@ export function MethodCard() {
             </div>
           </dl>
           <p className="mt-2.5 border-t border-line pt-2 text-[10px] leading-4 text-muted">
-            “Key present” only means the environment variable is set. It does not verify the
-            key or quota. Keys are read on the server and never sent to the browser.
+            {health.detail}
+          </p>
+          {aiHealth?.modelNotice ? (
+            <p className="mt-1.5 text-[10px] leading-4 text-amber">
+              {aiHealth.modelNotice}
+            </p>
+          ) : null}
+          <p className="mt-1.5 text-[10px] leading-4 text-muted">
+            The key is read only on the server and is never sent to the browser. Environment
+            variable changes on Vercel require a redeploy.
           </p>
           <div className="mt-2.5 flex flex-wrap items-center gap-2">
             <Button
               variant="outline"
               size="sm"
-              onClick={() => void refreshAiHealth()}
+              onClick={() => void refreshAiHealth(true)}
               disabled={aiHealthStatus === "checking"}
             >
               <RefreshCw
