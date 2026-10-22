@@ -102,12 +102,15 @@ export function EventDetailDialog({
       return;
     }
     toast({
-      title: result.meta.mode === "gemini" ? "Gemini explanation ready" : "Rules-based explanation ready",
+      title:
+        result.meta.mode === "groq"
+          ? `${result.meta.model ?? "Llama 3.3 70B"} explanation ready`
+          : "Rules-based explanation ready",
       description:
-        result.meta.mode === "gemini"
+        result.meta.mode === "groq"
           ? "The response was validated before it was attached to the event."
           : result.meta.message,
-      tone: result.meta.mode === "gemini" ? "success" : "info",
+      tone: result.meta.mode === "groq" ? "success" : "info",
     });
   };
 
@@ -258,8 +261,8 @@ export function EventDetailDialog({
                       </div>
                       <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-muted">
                         <span>
-                          {analysis.source === "gemini"
-                            ? `Gemini · ${analysis.model ?? "configured model"}`
+                          {analysis.source === "groq"
+                            ? `Groq · ${analysis.model ?? "configured model"}`
                             : "Deterministic rules-based fallback"}
                         </span>
                         <span aria-hidden="true">·</span>
@@ -277,7 +280,7 @@ export function EventDetailDialog({
                         <Callout tone="warning" title="AI was not used for this explanation">
                           {analysis.notice ??
                             analysis.fallbackReason ??
-                            "Gemini was unavailable, so a deterministic explanation was generated."}
+                            "Groq was unavailable, so a deterministic explanation was generated."}
                         </Callout>
                       ) : null}
                       {analysis.limitations.length > 0 ? (

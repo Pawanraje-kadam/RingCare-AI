@@ -5,14 +5,15 @@ import type { AiHealth } from "@/types/ai";
 function health(overrides: Partial<AiHealth> = {}): AiHealth {
   return {
     configured: true,
-    provider: "Google Gemini",
-    model: "gemini-3.8-flash",
-    modelLabel: "Gemini 3.8 Flash",
+    provider: "Groq",
+    model: "llama-3.3-70b-versatile",
+    modelLabel: "Llama 3.3 70B",
     promptVersion: "test",
     credentialsVerified: true,
     verificationStatus: "ok",
-    verificationMessage: "gemini-3.8-flash responded to a metadata request.",
-    keySource: "GEMINI_API_KEY",
+    verificationMessage:
+      "Groq accepted the key and lists llama-3.3-70b-versatile.",
+    keySource: "GROQ_API_KEY",
     checkedAt: new Date().toISOString(),
     ...overrides,
   };
@@ -49,7 +50,7 @@ describe("describeAiHealth", () => {
     );
     expect(rejected.tone).toBe("attention");
     expect(rejected.label).toMatch(/rejected/i);
-    expect(rejected.detail).toMatch(/GEMINI_API_KEY|redeploy/i);
+    expect(rejected.detail).toMatch(/GROQ_API_KEY|redeploy/i);
 
     const quota = describeAiHealth(
       health({
@@ -80,6 +81,8 @@ describe("describeAiHealth", () => {
 
   it("respects the AI-off preference and unreachable health", () => {
     expect(describeAiHealth(health(), "ready", false).label).toBe("AI off");
-    expect(describeAiHealth(null, "unreachable", true).label).toBe("AI status unknown");
+    expect(describeAiHealth(null, "unreachable", true).label).toBe(
+      "AI status unknown",
+    );
   });
 });

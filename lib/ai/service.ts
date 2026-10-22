@@ -2,8 +2,7 @@ import "server-only";
 import type { ZodType } from "zod";
 import {
   AI_LIMITS,
-  GEMINI_MODEL_ID,
-  GEMINI_MODEL_LABEL,
+  GROQ_MODEL_LABEL,
   PROMPT_VERSION,
   SAFE_AI_MESSAGES,
 } from "@/lib/constants/ai";
@@ -16,15 +15,15 @@ import {
   scanNarrativeSafety,
 } from "@/lib/ai/guardrails";
 import {
-  classifyGeminiError,
-  createGeminiClient,
+  classifyAiError,
+  createGroqClient,
   generateStructured,
-  GeminiRequestError,
-  logGeminiFailure,
-  readGeminiConfig,
-  verifyGeminiAccess,
-  type GeminiJsonClient,
-} from "@/lib/ai/gemini";
+  GroqRequestError,
+  logAiFailure,
+  readGroqConfig,
+  verifyAiAccess,
+  type GroqJsonClient,
+} from "@/lib/ai/groq";
 import {
   buildEventInterpretationPrompt,
   buildInsightPrompt,
@@ -36,10 +35,10 @@ import {
   SUMMARY_SYSTEM_PROMPT,
 } from "@/lib/ai/prompts";
 import {
-  eventInterpretationResponseSchema,
-  insightResponseSchema,
-  searchPlanResponseSchema,
-  summaryResponseSchema,
+  eventInterpretationSchemaHint,
+  insightSchemaHint,
+  searchPlanSchemaHint,
+  summarySchemaHint,
 } from "@/lib/ai/response-schemas";
 import { getCached, setCached, stableCacheKey } from "@/lib/ai/cache";
 import { evaluateEvent, type RuleSettings } from "@/lib/events/rules";
@@ -113,49 +112,49 @@ function makeFallbackMeta(
   };
 }
 
-function makeGeminiMeta(model: string, now: Date, cached: boolean): AiResponseMeta {
+function makeGroqMeta(model: string, now: Date, cached: boolean): AiResponseMeta {
   return {
-    mode: "gemini",
+    mode: "groq",
     model,
     cached,
     generatedAt: now.toISOString(),
   };
 }
 
-function resolveClient(explicit?: GeminiJsonClient): GeminiJsonClient | null {
+function resolveClient(explicit?: GroqJsonClient): GroqJsonClient | null {
   if (explicit) return explicit;
-  const runtime = readGeminiConfig();
+  const runtime = readGroqConfig();
   if (!runtime.configured) return null;
-  return createGeminiClient({ apiKey: runtime.apiKey, model: runtime.model });
+  return createGroqClient({
+    apiKey: runtime.apiKey,
+    model: runtime.model,
+    baseUrl: runtime.baseUrl,
+  });
 }
 
 /**
  * Health/configuration snapshot. When a key is present, this verifies it with
- * Gemini's free model-metadata endpoint (cached per instance) so the UI can
- * distinguish "key present" from "Gemini actually accepts this key".
+ * Groq's free `/models` endpoint (cached per instance) so the UI can
+ * distinguish "key present" from "Groq actually accepts this key".
  */
 export async function getHealth(
   options: { refresh?: boolean } = {},
 ): Promise<AiHealth> {
-  const config = readGeminiConfig();
-  const verification = await verifyGeminiAccess(config, {
+  const config = readGroqConfig();
+  const verification = await verifyAiAccess(config, {
     force: options.refresh,
   });
   return {
     configured: config.configured,
-    provider: "Google Gemini",
+    provider: "Groq",
     model: config.model,
-    modelLabel: GEMINI_MODEL_LABEL,
+    modelLabel: GROQ_MODEL_LABEL,
     promptVersion: PROMPT_VERSION,
     credentialsVerified: verification.status === "ok",
     verificationStatus: verification.status,
     verificationMessage: verification.message,
     keySource: config.keySource,
-    ...(config.ignoredModelEnv
-      ? {
-          modelNotice: `GEMINI_MODEL="${config.ignoredModelEnv}" was ignored. RingCare AI is pinned to ${GEMINI_MODEL_ID}.`,
-        }
-      : {}),
+    ...(config.modelNotice ? { modelNotice: config.modelNotice } : {}),
     ...(verification.latencyMs !== undefined
       ? { latencyMs: verification.latencyMs }
       : {}),
@@ -173,14 +172,15 @@ danger, an emergency, monitoring, or reassurance. Every number must appear in th
 The attentionLevel must exactly equal the deterministic rule level supplied above.`;
 
 interface ValidatedGenerationOptions<T> {
-  client: GeminiJsonClient;
+  client: GroqJsonClient;
   systemInstruction: string;
-  responseSchema: Record<string, unknown>;
+  /** Compact, human-readable schema hint appended to the prompt. */
+  schemaHint: string;
   schema: ZodType<T>;
   timeoutMs: number;
   maxOutputTokens: number;
   buildPrompt: () => string;
-  /** Throw a GeminiRequestError to reject an otherwise schema-valid result. */
+  /** Throw a GroqRequestError to reject an otherwise schema-valid result. */
   validate?: (value: T) => void;
 }
 
@@ -192,7 +192,7 @@ interface ValidatedGenerationOptions<T> {
 async function generateValidated<T>({
   client,
   systemInstruction,
-  responseSchema,
+  schemaHint,
   schema,
   timeoutMs,
   maxOutputTokens,
@@ -203,8 +203,7 @@ async function generateValidated<T>({
     const value = await generateStructured({
       client,
       systemInstruction,
-      userPrompt: `${buildPrompt()}${correction ?? ""}`,
-      responseSchema,
+      userPrompt: `${buildPrompt()}${correction ?? ""}${schemaHint}`,
       schema,
       timeoutMs,
       maxOutputTokens,
@@ -216,7 +215,7 @@ async function generateValidated<T>({
   try {
     return await attempt();
   } catch (error) {
-    const classified = classifyGeminiError(error);
+    const classified = classifyAiError(error);
     if (
       classified.reason === "invalid_response" ||
       classified.reason === "unsafe_response"
@@ -237,7 +236,7 @@ export interface AnalyzeEventInput {
   settings: AnalysisSettings;
   now?: Date;
   /** Injectable client for tests. Never supplied by the browser. */
-  client?: GeminiJsonClient;
+  client?: GroqJsonClient;
 }
 
 export interface AnalyzeEventResult {
@@ -302,7 +301,7 @@ export async function analyzeEvent({
   if (cached) {
     return {
       analysis: { ...cached, cached: true },
-      meta: makeGeminiMeta(client.model, now, true),
+      meta: makeGroqMeta(client.model, now, true),
       evaluation,
     };
   }
@@ -318,7 +317,7 @@ export async function analyzeEvent({
           settings: ruleSettings,
           relatedEvents: contextEvents,
         }),
-      responseSchema: eventInterpretationResponseSchema,
+      schemaHint: eventInterpretationSchemaHint,
       schema: eventInterpretationModelSchema,
       timeoutMs: AI_LIMITS.analyzeTimeoutMs,
       maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
@@ -332,10 +331,10 @@ export async function analyzeEvent({
           ...value.limitations,
         ]);
         if (unsafe) {
-          throw new GeminiRequestError("unsafe_response", `Unsafe narrative: ${unsafe}`);
+          throw new GroqRequestError("unsafe_response", `Unsafe narrative: ${unsafe}`);
         }
         if (value.attentionLevel !== evaluation.attentionLevel) {
-          throw new GeminiRequestError(
+          throw new GroqRequestError(
             "invalid_response",
             "Model attention level disagreed with deterministic rules",
             { detail: `expected ${evaluation.attentionLevel}, received ${value.attentionLevel}` },
@@ -358,7 +357,7 @@ export async function analyzeEvent({
           "Based only on supplied structured event metadata; no video or audio was analysed.",
         ]),
       ).slice(0, 6),
-      source: "gemini",
+      source: "groq",
       model: client.model,
       generatedAt: now.toISOString(),
       cached: false,
@@ -367,12 +366,12 @@ export async function analyzeEvent({
     setCached(cacheKey, analysis);
     return {
       analysis,
-      meta: makeGeminiMeta(client.model, now, false),
+      meta: makeGroqMeta(client.model, now, false),
       evaluation,
     };
   } catch (error) {
-    const classified = classifyGeminiError(error);
-    logGeminiFailure("analyze", classified);
+    const classified = classifyAiError(error);
+    logAiFailure("analyze", classified);
     return fallback(classified.reason, classified.detail);
   }
 }
@@ -389,7 +388,7 @@ export interface SummaryServiceInput {
   label: string;
   timeZone: string;
   now?: Date;
-  client?: GeminiJsonClient;
+  client?: GroqJsonClient;
 }
 
 export async function generateDailySummary({
@@ -447,7 +446,7 @@ export async function generateDailySummary({
     return {
       facts,
       narrative: { ...cached.narrative, model: cached.model },
-      meta: makeGeminiMeta(cached.model, now, true),
+      meta: makeGroqMeta(cached.model, now, true),
       generatedAt: now.toISOString(),
     };
   }
@@ -457,7 +456,7 @@ export async function generateDailySummary({
       client,
       systemInstruction: SUMMARY_SYSTEM_PROMPT,
       buildPrompt: () => buildSummaryPrompt({ facts, events }),
-      responseSchema: summaryResponseSchema,
+      schemaHint: summarySchemaHint,
       schema: summaryNarrativeModelSchema,
       timeoutMs: AI_LIMITS.summaryTimeoutMs,
       maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
@@ -478,7 +477,7 @@ export async function generateDailySummary({
           ...value.limitations,
         ]);
         if (unsafe) {
-          throw new GeminiRequestError("unsafe_response", `Unsafe summary: ${unsafe}`);
+          throw new GroqRequestError("unsafe_response", `Unsafe summary: ${unsafe}`);
         }
         const allowedCounts = [
           facts.counts.total,
@@ -496,11 +495,11 @@ export async function generateDailySummary({
         ];
         const badCount = findUnsupportedCountClaim(combined, allowedCounts);
         if (badCount) {
-          throw new GeminiRequestError("invalid_response", badCount);
+          throw new GroqRequestError("invalid_response", badCount);
         }
         const absence = findAbsenceContradiction(combined, facts.counts.total > 0);
         if (absence) {
-          throw new GeminiRequestError("invalid_response", absence);
+          throw new GroqRequestError("invalid_response", absence);
         }
       },
     });
@@ -518,7 +517,7 @@ export async function generateDailySummary({
       patterns: model.patterns,
       reviewItems: model.reviewItems,
       limitations,
-      source: "gemini",
+      source: "groq",
       model: client.model,
     };
 
@@ -526,12 +525,12 @@ export async function generateDailySummary({
     return {
       facts,
       narrative,
-      meta: makeGeminiMeta(client.model, now, false),
+      meta: makeGroqMeta(client.model, now, false),
       generatedAt: now.toISOString(),
     };
   } catch (error) {
-    const classified = classifyGeminiError(error);
-    logGeminiFailure("summary", classified);
+    const classified = classifyAiError(error);
+    logAiFailure("summary", classified);
     return fallback(classified.reason, classified.detail);
   }
 }
@@ -550,7 +549,7 @@ export interface InsightsServiceInput {
   previousTo: Date;
   timeZone: string;
   now?: Date;
-  client?: GeminiJsonClient;
+  client?: GroqJsonClient;
 }
 
 export async function generateActivityInsight({
@@ -610,7 +609,7 @@ export async function generateActivityInsight({
     return {
       facts,
       narrative: { ...cached.narrative, model: cached.model },
-      meta: makeGeminiMeta(cached.model, now, true),
+      meta: makeGroqMeta(cached.model, now, true),
       generatedAt: now.toISOString(),
     };
   }
@@ -620,7 +619,7 @@ export async function generateActivityInsight({
       client,
       systemInstruction: INSIGHT_SYSTEM_PROMPT,
       buildPrompt: () => buildInsightPrompt(facts),
-      responseSchema: insightResponseSchema,
+      schemaHint: insightSchemaHint,
       schema: insightNarrativeModelSchema,
       timeoutMs: AI_LIMITS.insightsTimeoutMs,
       maxOutputTokens: AI_LIMITS.maxOutputTokensNarrative,
@@ -632,14 +631,14 @@ export async function generateActivityInsight({
           ...value.limitations,
         ]);
         if (unsafe) {
-          throw new GeminiRequestError("unsafe_response", `Unsafe insight: ${unsafe}`);
+          throw new GroqRequestError("unsafe_response", `Unsafe insight: ${unsafe}`);
         }
         const totalComparison = facts.comparisons.find((item) => item.id === "total");
         if (/\bincreased\b/i.test(combined) && totalComparison?.direction !== "up") {
-          throw new GeminiRequestError("invalid_response", "Incorrect increase claim");
+          throw new GroqRequestError("invalid_response", "Incorrect increase claim");
         }
         if (/\bdecreased\b/i.test(combined) && totalComparison?.direction !== "down") {
-          throw new GeminiRequestError("invalid_response", "Incorrect decrease claim");
+          throw new GroqRequestError("invalid_response", "Incorrect decrease claim");
         }
         const allowedCounts = [
           ...facts.comparisons.flatMap((item) => [
@@ -660,10 +659,10 @@ export async function generateActivityInsight({
         ];
         const badCount = findUnsupportedCountClaim(combined, allowedCounts);
         if (badCount) {
-          throw new GeminiRequestError("invalid_response", badCount);
+          throw new GroqRequestError("invalid_response", badCount);
         }
         if (findAbsenceContradiction(combined, facts.current.total > 0)) {
-          throw new GeminiRequestError("invalid_response", "Incorrect absence claim");
+          throw new GroqRequestError("invalid_response", "Incorrect absence claim");
         }
       },
     });
@@ -677,7 +676,7 @@ export async function generateActivityInsight({
           "Based on partial simulated records, not continuous monitoring.",
         ]),
       ).slice(0, 4),
-      source: "gemini",
+      source: "groq",
       model: client.model,
     };
 
@@ -685,12 +684,12 @@ export async function generateActivityInsight({
     return {
       facts,
       narrative,
-      meta: makeGeminiMeta(client.model, now, false),
+      meta: makeGroqMeta(client.model, now, false),
       generatedAt: now.toISOString(),
     };
   } catch (error) {
-    const classified = classifyGeminiError(error);
-    logGeminiFailure("insights", classified);
+    const classified = classifyAiError(error);
+    logAiFailure("insights", classified);
     return fallback(classified.reason, classified.detail);
   }
 }
@@ -704,7 +703,7 @@ export interface SearchInterpretationInput {
   clientNow: Date;
   aiEnabled: boolean;
   now?: Date;
-  client?: GeminiJsonClient;
+  client?: GroqJsonClient;
 }
 
 export async function interpretSearchQuery({
@@ -734,7 +733,7 @@ export async function interpretSearchQuery({
       client,
       systemInstruction: SEARCH_SYSTEM_PROMPT,
       buildPrompt: () => buildSearchPrompt({ query, clientNow }),
-      responseSchema: searchPlanResponseSchema,
+      schemaHint: searchPlanSchemaHint,
       schema: searchPlanModelSchema,
       timeoutMs: AI_LIMITS.searchTimeoutMs,
       maxOutputTokens: AI_LIMITS.maxOutputTokensSearch,
@@ -746,7 +745,7 @@ export async function interpretSearchQuery({
           ...value.locations,
         ]);
         if (unsafe) {
-          throw new GeminiRequestError("unsafe_response", "Unsafe search interpretation");
+          throw new GroqRequestError("unsafe_response", "Unsafe search interpretation");
         }
       },
     });
@@ -772,12 +771,12 @@ export async function interpretSearchQuery({
 
     return {
       plan,
-      interpretedBy: "gemini",
-      meta: makeGeminiMeta(client.model, now, false),
+      interpretedBy: "groq",
+      meta: makeGroqMeta(client.model, now, false),
     };
   } catch (error) {
-    const classified = classifyGeminiError(error);
-    logGeminiFailure("search", classified);
+    const classified = classifyAiError(error);
+    logAiFailure("search", classified);
     return {
       plan: localPlan(),
       interpretedBy: "rules",

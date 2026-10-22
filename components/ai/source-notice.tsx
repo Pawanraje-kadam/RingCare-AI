@@ -1,7 +1,7 @@
 import { Cpu, Sparkles, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import type { AiResponseMeta } from "@/types/ai";
-import { AI_FALLBACK_HINTS, SAFE_AI_MESSAGES } from "@/lib/constants/ai";
+import { AI_FALLBACK_HINTS, GROQ_MODEL_LABEL, SAFE_AI_MESSAGES } from "@/lib/constants/ai";
 
 export function AiSourceNotice({
   meta,
@@ -12,15 +12,15 @@ export function AiSourceNotice({
   className?: string;
   showGeneratedAt?: boolean;
 }) {
-  if (meta.mode === "gemini") {
+  if (meta.mode === "groq") {
     return (
       <div className={className}>
         <div className="flex flex-wrap items-center gap-2 text-[10.5px] text-muted">
           <Badge tone="brand">
             <Sparkles aria-hidden="true" className="size-3" />
-            Gemini-generated
+            Groq · {GROQ_MODEL_LABEL}
           </Badge>
-          <span>{meta.model ?? "configured model"}</span>
+          <span className="font-mono">{meta.model ?? "llama-3.3-70b-versatile"}</span>
           {meta.cached ? <span>· served from cache</span> : null}
           {showGeneratedAt ? (
             <span>

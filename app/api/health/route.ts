@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
  * Safe health/configuration endpoint.
  *
  * Reports whether a key is configured and — because a present key is not proof
- * that Gemini will accept it — verifies the key against Gemini's free model
+ * that Groq will accept it — verifies the key against Groq's free model
  * metadata endpoint. Results are cached per instance for five minutes; pass
  * `?refresh=1` (used by the Settings "Test connection" button) to force a new
  * check. The key itself is never returned, logged, or included in any message.

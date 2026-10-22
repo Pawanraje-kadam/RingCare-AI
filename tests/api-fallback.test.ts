@@ -6,7 +6,7 @@ import { parseSettings } from "@/lib/validation/schemas";
 import { jsonRequest, makeEvent, NOW } from "./fixtures";
 import type { AnalysisSettings } from "@/types/settings";
 
-const originalKey = process.env.GEMINI_API_KEY;
+const originalKey = process.env.GROQ_API_KEY;
 
 function analysisSettings(overrides: Partial<AnalysisSettings> = {}): AnalysisSettings {
   const settings = parseSettings({});
@@ -42,12 +42,12 @@ const digest = {
 };
 
 beforeEach(() => {
-  delete process.env.GEMINI_API_KEY;
+  delete process.env.GROQ_API_KEY;
 });
 
 afterEach(() => {
-  if (originalKey === undefined) delete process.env.GEMINI_API_KEY;
-  else process.env.GEMINI_API_KEY = originalKey;
+  if (originalKey === undefined) delete process.env.GROQ_API_KEY;
+  else process.env.GROQ_API_KEY = originalKey;
 });
 
 describe("health route", () => {
@@ -63,15 +63,15 @@ describe("health route", () => {
     expect(ai.configured).toBe(false);
     expect(ai.credentialsVerified).toBe(false);
     expect(ai.verificationStatus).toBe("not_configured");
-    expect(ai.model).toBe("gemini-3.8-flash");
-    expect(ai.modelLabel).toBe("Gemini 3.8 Flash");
+    expect(ai.model).toBe("llama-3.3-70b-versatile");
+    expect(ai.modelLabel).toBe("Llama 3.3 70B");
     // Env var names may appear in guidance; key-shaped values must not.
     expect(JSON.stringify(body)).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
     expect(JSON.stringify(body)).not.toMatch(/secret|bearer/i);
   });
 });
 
-describe("summary API without a Gemini key", () => {
+describe("summary API without a Groq key", () => {
   it("returns a labelled deterministic summary instead of failing", async () => {
     const response = await summaryPOST(
       jsonRequest("http://localhost/api/ai/summary", {
@@ -132,7 +132,7 @@ describe("summary API without a Gemini key", () => {
   });
 });
 
-describe("analyze API without a Gemini key", () => {
+describe("analyze API without a Groq key", () => {
   it("returns a fallback explanation whose attention matches deterministic rules", async () => {
     const response = await analyzePOST(
       jsonRequest("http://localhost/api/ai/analyze", {
@@ -163,7 +163,7 @@ describe("analyze API without a Gemini key", () => {
     ).toBe(true); // Untrusted description is quoted as evidence, never executed.
   });
 
-  it("does not claim Gemini was used when AI is disabled", async () => {
+  it("does not claim Groq was used when AI is disabled", async () => {
     const response = await analyzePOST(
       jsonRequest("http://localhost/api/ai/analyze", {
         event,

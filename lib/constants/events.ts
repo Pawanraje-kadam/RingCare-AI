@@ -52,7 +52,7 @@ export type AttentionLevel = (typeof ATTENTION_LEVELS)[number];
 export const CONFIDENCE_LEVELS = ["low", "medium", "high"] as const;
 export type ConfidenceLevel = (typeof CONFIDENCE_LEVELS)[number];
 
-export const AI_SOURCES = ["gemini", "fallback"] as const;
+export const AI_SOURCES = ["groq", "fallback"] as const;
 export type AiSource = (typeof AI_SOURCES)[number];
 
 export const ACTION_CATEGORIES = [
@@ -224,12 +224,12 @@ export const PROCESSING_STATUS_META: Record<
   },
   ai_complete: {
     label: "AI explanation ready",
-    description: "A Gemini-generated explanation is attached to this event.",
+    description: "A Groq-generated explanation is attached to this event.",
   },
   ai_fallback: {
     label: "Rules-based explanation",
     description:
-      "A deterministic explanation is attached because Gemini was unavailable or declined.",
+      "A deterministic explanation is attached because Groq was unavailable or declined.",
   },
   ai_error: {
     label: "Analysis error",

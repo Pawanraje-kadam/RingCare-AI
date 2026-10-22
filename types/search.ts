@@ -4,7 +4,7 @@ import type { RingCareEvent, RuleEvaluation } from "./events";
 
 export type SearchPlan = z.infer<typeof searchPlanSchema>;
 
-export type SearchInterpreter = "gemini" | "rules";
+export type SearchInterpreter = "groq" | "rules";
 
 export interface SearchMatch {
   event: RingCareEvent;

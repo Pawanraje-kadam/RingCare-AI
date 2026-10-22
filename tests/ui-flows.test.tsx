@@ -90,14 +90,14 @@ beforeEach(() => {
         status: "ok",
         ai: {
           configured: false,
-          provider: "Google Gemini",
-          model: "gemini-3.8-flash",
-          modelLabel: "Gemini 3.8 Flash",
-          promptVersion: "2026-10-23.2",
+          provider: "Groq",
+          model: "llama-3.3-70b-versatile",
+          modelLabel: "Llama 3.3 70B",
+          promptVersion: "2026-10-24.1",
           credentialsVerified: false,
           verificationStatus: "not_configured",
           verificationMessage:
-            "No server-side Gemini key was found. Set GEMINI_API_KEY (or GOOGLE_API_KEY) and redeploy.",
+            "No server-side Groq key was found. Set GROQ_API_KEY and redeploy.",
           keySource: null,
         },
         checkedAt: new Date().toISOString(),
@@ -123,7 +123,7 @@ function Providers({ children }: { children: React.ReactNode }) {
 }
 
 describe("event timeline", () => {
-  it("interprets a natural-language search locally when Gemini is unavailable and filters records", async () => {
+  it("interprets a natural-language search locally when Groq is unavailable and filters records", async () => {
     const user = userEvent.setup();
     render(
       <Providers>

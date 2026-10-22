@@ -228,7 +228,7 @@ function makeComparison(
   return { id, label, current, previous, delta, direction, sentence };
 }
 
-/** Deterministic comparisons; Gemini is only allowed to narrate these values. */
+/** Deterministic comparisons; Groq is only allowed to narrate these values. */
 export function computeInsightFacts(
   events: RuleEvent[],
   settings: RuleSettings,

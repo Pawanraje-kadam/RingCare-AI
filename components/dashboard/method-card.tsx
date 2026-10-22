@@ -29,7 +29,7 @@ export function MethodCard() {
         <div>
           <CardTitle>How this demo works</CardTitle>
           <CardDescription>
-            Local event data, deterministic rules, and optional server-side Gemini
+            Local event data, deterministic rules, and optional server-side Groq
             narration.
           </CardDescription>
         </div>
@@ -42,7 +42,7 @@ export function MethodCard() {
           <div>
             <p className="text-[12px] font-medium text-ink">Rules decide, AI explains</p>
             <p className="mt-0.5 text-[11px] leading-5 text-muted">
-              Attention levels and recommendations come from deterministic rules. Gemini can
+              Attention levels and recommendations come from deterministic rules. Groq can
               phrase an explanation but cannot upgrade the attention level.
             </p>
           </div>
@@ -66,7 +66,7 @@ export function MethodCard() {
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink">
               <KeyRound aria-hidden="true" className="size-3.5 text-muted" />
-              Gemini status
+              Groq · Llama 3.3 70B
             </p>
             <Badge tone={health.tone}>
               {health.verified ? (
@@ -81,9 +81,13 @@ export function MethodCard() {
           </div>
           <dl className="mt-2.5 space-y-1.5 text-[10.5px]">
             <div className="flex justify-between gap-3">
+              <dt className="text-muted">Provider</dt>
+              <dd className="text-right text-ink-2">Groq</dd>
+            </div>
+            <div className="flex justify-between gap-3">
               <dt className="text-muted">Model</dt>
               <dd className="text-right font-mono text-ink-2">
-                {aiHealth?.model ?? "gemini-3.8-flash"}
+                {aiHealth?.model ?? "llama-3.3-70b-versatile"}
               </dd>
             </div>
             <div className="flex justify-between gap-3">
@@ -145,8 +149,9 @@ export function MethodCard() {
 
         <p className="flex items-start gap-1.5 text-[10.5px] leading-4 text-muted">
           <Sparkles aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
-          Gemini calls happen only when you request an explanation, summary, insight, or
-          search. Events from the automatic generator are never sent without your action.
+          Groq (llama-3.3-70b-versatile) is called only when you request an explanation,
+          summary, insight, or search. Events from the automatic generator are never sent
+          without your action.
         </p>
       </CardContent>
     </Card>

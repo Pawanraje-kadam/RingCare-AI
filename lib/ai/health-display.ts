@@ -5,7 +5,7 @@ export interface AiHealthSummary {
   tone: "neutral" | "brand" | "review" | "attention" | "unknown";
   /** One sentence explaining the current state. */
   detail: string;
-  /** True only when Gemini answered a verification request with this key. */
+  /** True only when Groq answered a verification request with this key. */
   verified: boolean;
   /** True when the configuration is expected to work. */
   usable: boolean;
@@ -34,7 +34,7 @@ export function describeAiHealth(
     return {
       label: "Checking AI",
       tone: "neutral",
-      detail: "Checking the server-side Gemini configuration.",
+      detail: "Checking the server-side Groq configuration.",
       verified: false,
       usable: false,
     };
@@ -56,7 +56,7 @@ export function describeAiHealth(
       label: "Rules-only",
       tone: "review",
       detail:
-        "No server-side Gemini key was found. Add GEMINI_API_KEY (or GOOGLE_API_KEY) and redeploy; the app runs deterministically until then.",
+        "No server-side Groq key was found. Add GROQ_API_KEY and redeploy; the app runs deterministically until then.",
       verified: false,
       usable: false,
     };
@@ -69,7 +69,7 @@ export function describeAiHealth(
         tone: "brand",
         detail:
           health.verificationMessage ??
-          "Gemini answered a free metadata request, so the key and model are usable.",
+          "Groq accepted the key and lists the configured model, so AI analysis is available.",
         verified: true,
         usable: true,
       };
@@ -79,7 +79,7 @@ export function describeAiHealth(
         tone: "attention",
         detail:
           health.verificationMessage ??
-          "Gemini rejected the API key. Replace GEMINI_API_KEY in the deployment, then redeploy.",
+          "Groq rejected the API key. Replace GROQ_API_KEY in the deployment, then redeploy.",
         verified: false,
         usable: false,
       };
@@ -89,7 +89,7 @@ export function describeAiHealth(
         tone: "attention",
         detail:
           health.verificationMessage ??
-          "Gemini does not expose gemini-3.8-flash to this project. Check the API key's project access.",
+          "Groq does not list llama-3.3-70b-versatile for this key. Check the model name or account access.",
         verified: false,
         usable: false,
       };
@@ -99,7 +99,7 @@ export function describeAiHealth(
         tone: "attention",
         detail:
           health.verificationMessage ??
-          "Gemini reported a quota or rate limit. Check the project limits in Google AI Studio.",
+          "Groq reported a quota or rate limit. Check the limits for this key in the Groq console.",
         verified: false,
         usable: false,
       };
@@ -109,7 +109,7 @@ export function describeAiHealth(
         tone: "review",
         detail:
           health.verificationMessage ??
-          "The server could not reach Gemini. AI requests will fall back to rules.",
+          "The server could not reach Groq. AI requests will fall back to rules.",
         verified: false,
         usable: false,
       };
@@ -119,7 +119,7 @@ export function describeAiHealth(
         tone: "review",
         detail:
           health.verificationMessage ??
-          "No server-side Gemini key was found. Add GEMINI_API_KEY and redeploy.",
+          "No server-side Groq key was found. Add GROQ_API_KEY and redeploy.",
         verified: false,
         usable: false,
       };
@@ -129,13 +129,13 @@ export function describeAiHealth(
         tone: "review",
         detail:
           health.verificationMessage ??
-          "Gemini returned an unexpected error while verifying the key.",
+          "Groq returned an unexpected error while verifying the key.",
         verified: false,
         usable: false,
       };
     default:
       return {
-        label: "Gemini configured",
+        label: "Groq key present",
         tone: "brand",
         detail:
           health.verificationMessage ??

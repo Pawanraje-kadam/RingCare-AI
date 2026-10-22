@@ -15,8 +15,8 @@ import {
 import {
   AI_LIMITS,
   AI_VERIFICATION_STATUSES,
-  DEFAULT_GEMINI_MODEL,
-  GEMINI_MODEL_LABEL,
+  DEFAULT_GROQ_MODEL,
+  GROQ_MODEL_LABEL,
   PROMPT_VERSION,
 } from "@/lib/constants/ai";
 import {
@@ -90,7 +90,10 @@ export const aiAnalysisSchema = z
     attentionLevel: z.enum(ATTENTION_LEVELS),
     uncertainty: z.array(z.string().trim().min(1).max(240)).max(6),
     limitations: z.array(z.string().trim().min(1).max(240)).max(6),
-    source: z.enum(AI_SOURCES),
+    source: z.preprocess(
+      (value) => (value === "gemini" ? "groq" : value),
+      z.enum(AI_SOURCES),
+    ),
     model: safeModelNameSchema.optional(),
     generatedAt: isoDateTimeSchema,
     cached: z.boolean().optional(),
@@ -140,11 +143,11 @@ export const ringCareEventSchema = z
     if (event.location === "unknown" && event.eventType !== "unknown_activity") {
       // Allowed, but the rule engine will flag it as incomplete information.
     }
-    if (event.processingStatus === "ai_complete" && event.analysis?.source !== "gemini") {
+    if (event.processingStatus === "ai_complete" && event.analysis?.source !== "groq") {
       ctx.addIssue({
         code: "custom",
         path: ["processingStatus"],
-        message: "ai_complete requires a Gemini-sourced analysis",
+        message: "ai_complete requires a Groq-sourced analysis",
       });
     }
   });
@@ -419,7 +422,10 @@ export const searchPlanSchema = z
 
 export const aiResponseMetaSchema = z
   .object({
-    mode: z.enum(["gemini", "fallback"]),
+    mode: z.preprocess(
+      (value) => (value === "gemini" ? "groq" : value),
+      z.enum(["groq", "fallback"]),
+    ),
     reason: z.enum(FALLBACK_REASONS).optional(),
     message: z.string().trim().max(320).optional(),
     detail: z.string().trim().max(200).optional(),
@@ -477,8 +483,8 @@ export function parseIncomingEvent(
 
 export const aiConfigSchema = z.object({
   configured: z.boolean(),
-  provider: z.literal("Google Gemini"),
-  model: safeModelNameSchema.default(DEFAULT_GEMINI_MODEL),
+  provider: z.literal("Groq"),
+  model: safeModelNameSchema.default(DEFAULT_GROQ_MODEL),
   promptVersion: z.string(),
 });
 
@@ -501,7 +507,10 @@ export const summaryNarrativeSchema = z
     patterns: z.array(z.string().trim().max(400)).max(6),
     reviewItems: z.array(z.string().trim().max(400)).max(6),
     limitations: z.array(z.string().trim().max(400)).max(6),
-    source: z.enum(AI_SOURCES),
+    source: z.preprocess(
+      (value) => (value === "gemini" ? "groq" : value),
+      z.enum(AI_SOURCES),
+    ),
     model: safeModelNameSchema.optional(),
     notice: z.string().trim().max(500).optional(),
   })
@@ -610,7 +619,10 @@ export const insightNarrativeSchema = z
     headline: z.string().trim().min(1).max(400),
     observations: z.array(z.string().trim().max(400)).max(8),
     limitations: z.array(z.string().trim().max(400)).max(8),
-    source: z.enum(AI_SOURCES),
+    source: z.preprocess(
+      (value) => (value === "gemini" ? "groq" : value),
+      z.enum(AI_SOURCES),
+    ),
     model: safeModelNameSchema.optional(),
     notice: z.string().trim().max(500).optional(),
   })
@@ -646,7 +658,7 @@ export const searchResponseSchema = z
   .object({
     ok: z.literal(true),
     plan: searchPlanSchema,
-    interpretedBy: z.enum(["gemini", "rules"]),
+    interpretedBy: z.enum(["groq", "rules"]),
     meta: aiResponseMetaSchema,
   })
   .strict();
@@ -664,14 +676,14 @@ export const healthResponseSchema = z
     status: z.literal("ok"),
     ai: z.object({
       configured: z.boolean(),
-      provider: z.literal("Google Gemini"),
+      provider: z.literal("Groq"),
       model: safeModelNameSchema,
-      modelLabel: z.string().trim().max(80).default(GEMINI_MODEL_LABEL),
+      modelLabel: z.string().trim().max(80).default(GROQ_MODEL_LABEL),
       promptVersion: z.string(),
       credentialsVerified: z.boolean(),
       verificationStatus: z.enum(AI_VERIFICATION_STATUSES),
       verificationMessage: z.string().trim().max(360).optional(),
-      keySource: z.enum(["GEMINI_API_KEY", "GOOGLE_API_KEY"]).nullable().optional(),
+      keySource: z.enum(["GROQ_API_KEY"]).nullable().optional(),
       modelNotice: z.string().trim().max(200).optional(),
       latencyMs: z.number().int().min(0).optional(),
     }),

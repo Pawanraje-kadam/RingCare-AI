@@ -8,9 +8,10 @@ into structured explanations, deterministic attention suggestions, daily summari
 constrained natural-language search, and caregiver-arrival records.
 
 The application is built with Next.js (App Router), TypeScript, Tailwind CSS, Zod, and
-optional server-side Google Gemini analysis. It runs fully without a Gemini key by
-falling back to deterministic rules, and every AI-generated versus rules-generated
-result is clearly labelled.
+optional server-side Groq analysis with **Llama 3.3 70B**
+(`llama-3.3-70b-versatile`). It runs fully without a Groq key by falling back to
+deterministic rules, and every AI-generated versus rules-generated result is clearly
+labelled with the model that produced it.
 
 > **This is a simulation, not a security system.**
 > No Ring account, camera, doorbell, or live device is connected. There is no facial
@@ -51,8 +52,8 @@ result is clearly labelled.
 - **Recent activity feed** and a **needs-review queue** sorted by rule severity and time.
 - **Activity chart** (today in four-hour blocks, or the last seven days) with a complete
   table alternative and a text description. Color is never the only meaning.
-- **AI daily summary** grounded in deterministic facts. Gemini may phrase it; it cannot
-  invent counts. The source and fallback reason are always visible.
+- **AI daily summary** grounded in deterministic facts. Llama 3.3 70B via Groq may phrase
+  it; it cannot invent counts. The source and fallback reason are always visible.
 - **Event timeline** with natural-language search, manual filters (type, attention,
   location, date, time of day, caregiver-rule match), sorting, pagination, and a full
   detail dialog.
@@ -61,8 +62,9 @@ result is clearly labelled.
   - the rule attention level, reasons, matched rules, and every rule checked;
   - missing-information and uncertainty notes;
   - the deterministic recommendation;
-  - the Gemini explanation (if requested and available) or an explicit deterministic
-    fallback, including model, confidence, limitations, and retry action;
+  - the Llama 3.3 70B explanation (if requested and available) or an explicit
+    deterministic fallback, including the model that answered, confidence, limitations,
+    and a retry action;
   - a remove action with confirmation.
 - **AI insights** comparing the current period with the immediately preceding period,
   including total events, deliveries, caregiver arrivals, review items, top location,
@@ -80,11 +82,14 @@ result is clearly labelled.
   person detection, motion, prolonged presence, and unknown activity.
 - **Auto-generation controls** (off by default) for synthetic events at a configured
   interval while the tab is open. It never sends AI requests automatically.
-- **Guided “Run demo” sequence** with visible progress:
+- **Guided “Run demo” dialog** with two options before starting — reset to a reproducible
+  dataset, and whether to send the single AI explanation request — plus a footer that stays
+  outside the scrolling step list so **Start guided demo** is always reachable, including
+  on short mobile viewports. The sequence has visible progress:
   1. reset to a reproducible dataset (optional);
   2. add a simulated delivery event;
   3. run deterministic delivery rules;
-  4. request a Gemini explanation or explicitly fall back to rules;
+  4. request a Llama 3.3 70B explanation or explicitly fall back to rules;
   5. show a proportionate recommendation;
   6. add a simulated caregiver arrival with your configured label;
   7. evaluate the caregiver rule (metadata match only);
@@ -98,12 +103,13 @@ result is clearly labelled.
 ### API and safety layer
 
 - **Health endpoint** at `GET /api/health` reporting service status, demo mode, the
-  pinned model, prompt version, which env var supplied the key, and a real
-  `verificationStatus` from Gemini's free model-metadata endpoint (cached five minutes;
+  active model and label, prompt version, which env var supplied the key, and a real
+  `verificationStatus` from Groq's free `/models` endpoint (cached five minutes;
   `?refresh=1` forces a check) — never the key itself.
-- **Server-side Gemini integration** with `@google/genai`, constrained JSON response
-  schemas, a second Zod validation pass, prompt-injection delimiters, safety guardrails,
-  bounded input sizes, timeouts, and deterministic fallbacks.
+- **Server-side Groq integration** over the OpenAI-compatible Chat Completions API
+  (`POST /chat/completions`, JSON mode), with schema hints in the prompt, a Zod
+  validation pass, prompt-injection delimiters, safety guardrails, bounded input sizes,
+  timeouts, and deterministic fallbacks.
 - **Event ingestion boundary** at `POST /api/events` that accepts only validated,
   explicitly simulated events and rejects live Ring sources.
 - **Demo dataset endpoint** at `POST /api/demo`.
@@ -120,7 +126,7 @@ The architecture deliberately separates **classification** from **narration**.
 Event metadata ──► Zod validation ──► deterministic rule engine ──► rule facts
                                              │
                                              ▼
-                               optional Gemini narration (bounded)
+                               optional Groq narration (bounded)
                                              │
                     constrained JSON ──► Zod validation ──► guardrails
                                              │
@@ -145,9 +151,10 @@ The rule engine (`lib/events/rules.ts`) only evaluates objective, configured con
 Every matched rule carries a plain-language reason. Unfamiliarity, appearance, time of
 day, and raw duration alone never produce a high-attention result.
 
-### Gemini only explains
+### Groq only explains
 
-When `GEMINI_API_KEY` is present and AI is enabled, server routes may use Google Gemini to:
+When `GROQ_API_KEY` is present and AI is enabled, server routes may ask Groq
+(`llama-3.3-70b-versatile` by default) to:
 
 - interpret a single event using its metadata and deterministic rule result;
 - write a daily summary from deterministic facts;
@@ -161,36 +168,42 @@ JSON matching an allow-listed schema. The server then:
 2. scans narrative text for unsupported criminality, danger, identity, emergency,
    reassurance, monitoring, and prompt-injection claims;
 3. checks unsupported numeric claims against computed counts;
-4. verifies Gemini’s event attention level exactly equals the rule engine’s level;
+4. verifies the model’s event attention level exactly equals the rule engine’s level;
 5. rejects and falls back on any mismatch.
 
-For search, Gemini can only choose allow-listed fields and enum values. The app then
+For search, the model can only choose allow-listed fields and enum values. The app then
 executes the validated plan **against its own local records**; no model-generated SQL,
 shell command, URL, or arbitrary instruction is executed.
 
-### Model and thinking settings
+### Model and request settings
 
-- **The app is pinned to `gemini-3.8-flash`.** The identifier lives in
-  `lib/constants/ai.ts` and is used by every route, the health check, the settings page,
-  and the tests. `GEMINI_MODEL` may repeat the same identifier (with or without a
-  `models/` prefix, and in display-name form), but a value naming a different model is
-  ignored and reported in Settings.
-- **Thinking is set to `low`.** Gemini 3.8 Flash thinks at `medium` by default and rejects
-  `minimal`. Medium thinking adds latency and consumes the output-token budget, which is a
-  common cause of empty or truncated JSON on small structured tasks. `thinkingLevel: LOW`
-  keeps responses fast and within the output budget.
-- **Output budgets** are intentionally larger than the JSON payloads (`2048` tokens for
-  narration, `1024` for search) because thinking tokens count toward the same budget.
-- **Temperature is left at the model default.** Google advises against very low
-  temperatures on Gemini 3 thinking models.
+- **The default model is `llama-3.3-70b-versatile`** (shown in the UI as
+  **Llama 3.3 70B**). The identifier lives in `lib/constants/ai.ts`; the health endpoint,
+  Settings, status cards, AI badges, and the guided demo all read from it, so no surface
+  can name a different model than the one that answered.
+- **`GROQ_MODEL` may select another Groq model.** The value is normalized (case,
+  whitespace) and validated; an invalid identifier falls back to the default and produces
+  a `modelNotice` that Settings displays.
+- **JSON mode, not a schema.** Groq's
+  `response_format: { type: "json_object" }` guarantees syntactically valid JSON but not a
+  particular shape. Each prompt therefore carries an explicit JSON *shape hint*
+  (`lib/ai/response-schemas.ts`), and every response is still validated with Zod and the
+  safety guardrails.
+- **Bounded output.** `max_completion_tokens` is 2048 for narration and 1024 for search.
+  A completion that stops with `finish_reason: "length"` is treated as
+  `invalid_response` rather than shown half-parsed.
+- **Temperature 0.2**, `stream: false`, and a 15–24 s timeout per request.
+- **One retry, only when it is safe.** 5xx responses and transport timeouts are retried
+  once after 350 ms. Auth and quota errors are never retried. A schema or guardrail
+  rejection gets one corrective retry with a stricter instruction.
 
 ### Every result is labelled
 
-AI responses carry `meta.mode` (`gemini` or `fallback`), an optional safe reason, an
-optional short diagnostic (`meta.detail`, for example `HTTP 401 · API key not valid`),
-model, cache status, and timestamp. UI badges and notices display whether content came
-from Gemini, the short-lived server cache, or deterministic rules. The app never claims AI
-was used when a fallback produced the text.
+AI responses carry `meta.mode` (`groq` or `fallback`), an optional safe reason, an
+optional short diagnostic (`meta.detail`, for example `HTTP 401 · Invalid API Key`),
+the model that answered, cache status, and timestamp. UI badges and notices display
+whether content came from Groq/Llama 3.3 70B, the short-lived server cache, or
+deterministic rules. The app never claims AI was used when a fallback produced the text.
 
 If a schema-valid answer fails a semantic check (wrong attention level, an unsupported
 count, or a prohibited claim), the server retries **once** with a corrective instruction
@@ -202,10 +215,10 @@ blindly.
 Fallbacks occur when:
 
 - AI is disabled in Settings (`ai_disabled`);
-- `GEMINI_API_KEY` is absent (`missing_api_key`);
+- `GROQ_API_KEY` is absent (`missing_api_key`);
 - the server route is unreachable (`network_error`);
 - a request times out;
-- Gemini reports quota/rate limits (`rate_limited`);
+- Groq reports quota/rate limits (`rate_limited`);
 - the provider fails (`provider_error`);
 - output fails schema validation (`invalid_response`);
 - output makes unsupported claims (`unsafe_response`).
@@ -219,8 +232,7 @@ fully functional without a key.
 
 - **Node.js 20.9 or newer** (Node 22 recommended)
 - npm (a `package-lock.json` is included)
-- Optional: a Google Gemini API key from
-  [Google AI Studio](https://aistudio.google.com/apikey)
+- Optional: a Groq API key from <https://console.groq.com/keys>
 
 ---
 
@@ -229,13 +241,13 @@ fully functional without a key.
 ```bash
 npm install
 cp .env.example .env.local
-# Optional: add GEMINI_API_KEY to .env.local
+# Optional: add GROQ_API_KEY to .env.local
 npm run dev
 ```
 
 Open **http://localhost:3000**. The root redirects to `/dashboard`.
 
-Without a Gemini key:
+Without a Groq key:
 
 - the dashboard, simulator, rules, timeline, caregiver, and settings all work;
 - the header shows **Rules-only**;
@@ -262,9 +274,9 @@ npm start
 
 | Variable | Required | Scope | Purpose |
 | --- | --- | --- | --- |
-| `GEMINI_API_KEY` | No | Server only | Google Gemini API key. Absent/empty → deterministic rules-only mode. |
-| `GOOGLE_API_KEY` | No | Server only | Accepted as a fallback name when `GEMINI_API_KEY` is empty (the official SDK supports both). |
-| `GEMINI_MODEL` | No | Server only | Optional confirmation of the pinned `gemini-3.8-flash` model. Cannot switch the app to another model. |
+| `GROQ_API_KEY` | No | Server only | Groq API key. Absent/empty → deterministic rules-only mode. |
+| `GROQ_MODEL` | No | Server only | Optional Groq model override. Defaults to `llama-3.3-70b-versatile`; invalid values are ignored with a notice. |
+| `GROQ_BASE_URL` | No | Server only | Optional base URL for the OpenAI-compatible API. Defaults to `https://api.groq.com/openai/v1`; useful for a local mock or proxy. |
 
 Rules:
 
@@ -273,31 +285,34 @@ Rules:
 - `.env.local` is git-ignored. `.env.example` contains placeholders only.
 - Pasted values are normalized: surrounding quotes, a leading `Bearer`, and embedded
   whitespace/newlines are removed before use.
-- The key is read only in `lib/ai/gemini.ts` on the server. It is never returned by an
+- The key is read only in `lib/ai/groq.ts` on the server. It is never returned by an
   API, stored in an event, written to a log, or rendered in Settings. Provider messages
-  are sanitized (keys are redacted) before they reach the UI.
-- The app is pinned to `gemini-3.8-flash`. A `GEMINI_MODEL` value naming a different model
-  is ignored, and Settings shows a notice explaining that.
+  are sanitized (`gsk_…` keys and `Bearer …` tokens are redacted) before they reach the UI.
+- The default model is `llama-3.3-70b-versatile`. If `GROQ_MODEL` is set, its value is
+  normalized and validated; the model actually used is reported by `/api/health` and shown
+  on every AI result.
+- Legacy `GEMINI_API_KEY`, `GOOGLE_API_KEY`, and `GEMINI_MODEL` variables are **not** read.
+  Remove them from an existing deployment to avoid confusion.
 - **On Vercel, adding or changing an environment variable requires a redeploy.** Existing
   deployments keep their original environment.
-- Free-tier availability and quotas vary by model and project. Check
-  <https://aistudio.google.com/rate-limit>. Rate limits apply per Google Cloud project,
-  not per key.
+- Groq rate limits and free-tier availability are per account and per model. Check
+  <https://console.groq.com/docs/rate-limits>.
 
 ### Verifying the key
 
-`/api/health` reports whether a key is configured **and** whether Gemini accepts it. When a
-key exists, the server calls Gemini's free model-metadata endpoint (`models.get`) with a
-short timeout and caches the result for five minutes. It does not spend generation tokens.
+`/api/health` reports whether a key is configured **and** whether Groq accepts it. When a
+key exists, the server calls Groq's free `/models` endpoint with a short timeout and caches
+the result for five minutes. It does not spend completion tokens, and it also confirms that
+the configured model is listed for that key.
 
 | `verificationStatus` | Meaning | What to do |
 | --- | --- | --- |
-| `ok` | Gemini answered; the key and model are usable. | Nothing. |
-| `not_configured` | No key variable was found. | Add `GEMINI_API_KEY` and redeploy. |
-| `invalid_key` | HTTP 401/403 — Gemini rejected the key. | Replace the key, then redeploy. |
-| `model_unavailable` | HTTP 404 for `gemini-3.8-flash`. | Check the key's project access. |
-| `quota` | HTTP 429 — project quota or rate limit. | Wait or raise the project quota. |
-| `unreachable` | Network/timeout while contacting Gemini. | Check outbound access. |
+| `ok` | Groq answered and lists the configured model. | Nothing. |
+| `not_configured` | No `GROQ_API_KEY` was found. | Add `GROQ_API_KEY` and redeploy. |
+| `invalid_key` | HTTP 401/403 — Groq rejected the key. | Replace the key, then redeploy. |
+| `model_unavailable` | The key works but does not list `llama-3.3-70b-versatile`. | Check `GROQ_MODEL` or account access. |
+| `quota` | HTTP 429 — account rate limit. | Wait or raise the limit. |
+| `unreachable` | Network/timeout while contacting Groq. | Check outbound access and `GROQ_BASE_URL`. |
 | `error` | Any other provider error. | Inspect the sanitized message. |
 
 The same information appears in **Settings → AI analysis** with a **Test connection**
@@ -352,9 +367,9 @@ button (`GET /api/health?refresh=1`), in the header chip, and on the overview ca
   `ringcare.events.v1`, validated on read and write. There is no server event database and
   no in-memory server state used as durable storage.
 - **Stateless server AI routes.** The browser sends bounded event digests, never the full
-  local store. The server recomputes deterministic rules and facts before calling Gemini.
+  local store. The server recomputes deterministic rules and facts before calling Groq.
 - **Short-lived in-memory cache** on the server (30-minute TTL, bounded entries) reduces
-  duplicate Gemini calls. It is per instance and disappears on restart.
+  duplicate Groq calls. It is per instance and disappears on restart.
 - **Rate limits** are per server instance, per route, per client IP.
 - **Retention and settings** live in the browser. Clearing site data resets the demo.
 
@@ -406,10 +421,10 @@ the app.
   emergency services.
 - **Untrusted text is data.** Event descriptions, labels, notes, and search queries are
   treated as untrusted input, sanitized, delimited in prompts, and never executed.
-- **Constrained outputs.** Gemini must return JSON matching a narrow schema. Outputs are
-  re-validated with Zod and scanned before display. Attention levels are recomputed
-  server-side.
-- **Secrets stay server-side.** `GEMINI_API_KEY` is read only by server-only modules; the
+- **Constrained outputs.** Groq is asked for JSON in a documented shape (JSON mode plus an
+  explicit shape hint in the prompt), and the result is re-validated with Zod and scanned
+  by the guardrails before display. Attention levels are recomputed server-side.
+- **Secrets stay server-side.** `GROQ_API_KEY` is read only by server-only modules; the
   health endpoint reports only a boolean. No secret appears in client bundles or logs.
 - **Bounded requests.** Timeouts, maximum events/descriptions, body-size caps, and
   per-instance rate limits are enforced. Errors log only an error class/name, not request
@@ -467,13 +482,17 @@ Coverage includes:
   bodies, wrong content types, and disabled AI;
 - dashboard hydration, seeded data, simulated event creation, timeline local search, and
   settings validation/persistence;
-- Gemini request shape (pinned model, `thinkingLevel: "low"`, output budget, no
-  temperature), credential normalization and `GOOGLE_API_KEY` fallback, ignored model
-  overrides, credential verification outcomes (`ok`, `invalid_key`, `model_unavailable`,
-  `quota`), and safe provider details;
-- Gemini narration success paths for analysis, summary, search, and insights, including
-  one corrective retry after a schema/semantic rejection and a deterministic fallback
-  after repeated unsafe claims.
+- Groq request shape (`POST /chat/completions`, pinned `llama-3.3-70b-versatile`, bearer
+  auth, JSON mode, output budget, temperature), key normalization without a legacy Gemini
+  fallback, `GROQ_MODEL` override and invalid-model notice, credential verification
+  outcomes (`ok`, `invalid_key`, `model_unavailable`, `quota`, `unreachable`), and
+  redacted provider details;
+- Groq narration success paths for analysis, summary, search, and insights, including one
+  corrective retry after a schema/semantic rejection and a deterministic fallback after
+  repeated unsafe claims;
+- the guided demo: the primary action lives outside the scrolling body (so it is reachable
+  on short viewports), both demo options toggle, and unchecking the AI option sends no
+  `/api/ai/*` request.
 
 ### Verified in this workspace
 
@@ -481,29 +500,44 @@ At the time of writing this README, the following commands were actually run:
 
 - `npm run lint` — passed with no errors or warnings.
 - `npx tsc --noEmit` — passed.
-- `npm test` — 11 test files, **77 tests passed**.
+- `npm test` — 12 test files, **85 tests passed**.
 - `npm run build` — production build succeeded (Next.js 15.5.28), with static dashboard
   pages and dynamic API routes.
-- `npm run dev -- --hostname 0.0.0.0` — started successfully; `/`, `/dashboard`,
-  `/dashboard/timeline`, `/dashboard/insights`, `/dashboard/caregiver`, and
-  `/dashboard/settings` returned HTTP 200 (the root returns a redirect), and
-  `GET /api/health` returned `configured: false` with the expected model and prompt
-  version in rules-only mode.
-- `POST /api/demo` — returned a valid simulated seed dataset.
-- `npm start` (production build) with a local mock of the Gemini REST API — `/api/health`
-  reported `verificationStatus: "ok"` with a measured latency, and all four AI routes
-  (`summary`, `analyze`, `search`, `insights`) returned `mode: "gemini"`. The captured
-  request contained `thinkingConfig: { thinkingLevel: "LOW" }`, `maxOutputTokens: 2048`,
-  and no temperature override.
-- The same production server with the mock returning HTTP 401 — health reported
-  `invalid_key` with the actionable message, and AI routes fell back with a safe
-  `meta.detail` such as `HTTP 401 · API key not valid. Please pass a valid API key.`
+- `npm run dev` — started successfully; `/`, `/dashboard`, `/dashboard/timeline`,
+  `/dashboard/insights`, `/dashboard/caregiver`, and `/dashboard/settings` returned
+  HTTP 200 (the root returns a redirect), and `GET /api/health` reported
+  `configured: false` with `verificationStatus: "not_configured"` in rules-only mode.
+- `POST /api/demo` — returned a valid simulated seed dataset (29 events).
+- `npm start` (production build) with a local mock of Groq's OpenAI-compatible API
+  (`GROQ_BASE_URL=http://127.0.0.1:4010/openai/v1`):
+  - `/api/health` reported `verificationStatus: "ok"`, `credentialsVerified: true`,
+    `provider: "Groq"`, `model: "llama-3.3-70b-versatile"`, `modelLabel: "Llama 3.3 70B"`,
+    `keySource: "GROQ_API_KEY"`, and a measured latency from a real `GET /models` call;
+  - all four AI routes (`summary`, `analyze`, `search`, `insights`) returned
+    `mode: "groq"` with `model: "llama-3.3-70b-versatile"`;
+  - the captured request was `POST /chat/completions` with
+    `Authorization: Bearer …`, `model: "llama-3.3-70b-versatile"`, `temperature: 0.2`,
+    `max_completion_tokens: 2048` (1024 for search), `response_format: { type: "json_object" }`,
+    `stream: false`, and `system` + `user` messages.
+- Failure paths with the same mock:
+  - HTTP 401 — health reported `invalid_key` with the actionable message, and a fresh
+    analyze request fell back with `meta.reason: "provider_error"` and the sanitized
+    `detail: "HTTP 401 · Invalid API Key"` (the key never appeared in any response);
+  - an empty/truncated completion — `meta.reason: "invalid_response"` with
+    `detail: "finish_reason length"`, after the single corrective retry;
+  - a completion containing unsafe claims — `meta.reason: "unsafe_response"` after the
+    corrective retry, with deterministic fallback text;
+  - a malformed search plan (`datePreset: "all"`) — rejected by Zod, with the field named
+    in `meta.detail`, and search interpreted locally instead.
+- The guided demo is covered by a jsdom test that opens it, toggles both options, runs all
+  ten steps to completion, and asserts that unchecking the AI option sends no `/api/ai/*`
+  request. The primary action is asserted to sit outside the dialog's scrolling body so it
+  remains reachable on short viewports.
 
-**Not verified here:** calls against Google's live service, because no real
-`GEMINI_API_KEY` exists in this environment. The request/response path was verified
-end-to-end with the real `@google/genai` client pointed at a local mock of the documented
-REST API (`GOOGLE_GEMINI_BASE_URL`), and the same code path is covered by unit tests.
-Account access, live quota, and real-world latency still need a real key in your
+**Not verified here:** calls against Groq's live service, because no real `GROQ_API_KEY`
+exists in this environment. The HTTP path was verified end-to-end against a local mock of
+the documented OpenAI-compatible API, and the same code path is covered by unit tests.
+Account access, live rate limits, and real-world latency still need a real key in your
 deployment. Visual browser testing was limited to jsdom interaction tests and
 server-rendered response checks; no screenshot-based visual regression suite is included.
 
@@ -527,10 +561,9 @@ or database.
 5. Under **Settings → General**, use **Node.js 20.x or newer** (22.x recommended).
 6. Under **Settings → Environment Variables**, add for **Production, Preview, and
    Development** as appropriate:
-   - `GEMINI_API_KEY` = your key (mark it sensitive; do not select “Expose to browser”).
-     `GOOGLE_API_KEY` also works if you prefer that name; leave the other one empty.
-   - `GEMINI_MODEL` = optional confirmation of `gemini-3.8-flash`; it cannot switch models.
-   - Do **not** create any `NEXT_PUBLIC_GEMINI_*` variable.
+   - `GROQ_API_KEY` = your key (mark it sensitive; do not select “Expose to browser”).
+   - `GROQ_MODEL` = optional; defaults to `llama-3.3-70b-versatile`.
+   - Do **not** create any `NEXT_PUBLIC_GROQ_*` variable.
 7. Click **Deploy**.
 8. After deployment, verify the key before judging the app:
    - open `https://<your-project>.vercel.app/api/health` and check
@@ -539,7 +572,8 @@ or database.
      `/api/health?refresh=1` and forces a fresh check);
    - if the status is `invalid_key`, `model_unavailable`, `quota`, or `unreachable`, the
      message tells you exactly which step failed;
-   - then request a summary or explanation and confirm the badge says Gemini-generated.
+   - then request a summary or explanation and confirm the badge names the model that answered
+     (for example `Llama 3.3 70B`).
 9. **Redeploy after any environment-variable change.** Adding a variable in Vercel does
    not update deployments that are already built. This is the most common reason a key
    appears to be ignored.
@@ -553,8 +587,8 @@ or database.
 npm i -g vercel
 vercel
 # Follow prompts; link the project.
-vercel env add GEMINI_API_KEY production
-vercel env add GEMINI_MODEL production   # optional
+vercel env add GROQ_API_KEY production
+vercel env add GROQ_MODEL production   # optional
 vercel --prod
 ```
 
@@ -590,11 +624,11 @@ Before exposing this to real users or real data, add:
 
 ### “Rules-only” badge / `configured: false`
 
-- No key variable was found in the running environment. Set `GEMINI_API_KEY` (or
-  `GOOGLE_API_KEY`) and **redeploy** — Vercel does not inject new variables into an
-  existing deployment.
-- Check that the variable is not named `NEXT_PUBLIC_GEMINI_API_KEY` (that name is exposed
-  to the browser and is deliberately not read by the server).
+- No `GROQ_API_KEY` was found in the running environment. Set it and **redeploy** —
+  Vercel does not inject new variables into an existing deployment.
+- Check that the variable is not named `NEXT_PUBLIC_GROQ_API_KEY` (that name is exposed to
+  the browser and is deliberately not read by the server).
+- Legacy `GEMINI_API_KEY`/`GOOGLE_API_KEY` variables are ignored by design; rename them.
 - Settings now shows which variable supplied the key (`Key variable` row).
 
 ### Key is set but every result is a fallback
@@ -606,21 +640,20 @@ This was the most common failure mode before the current release. Work through i
    problem: `invalid_key` (401/403), `model_unavailable` (404), `quota` (429),
    `unreachable` (network), or `ok`.
 3. Read the fallback notice on the event/summary. It now includes a safe
-   `meta.detail`, e.g. `HTTP 401 · API key not valid`, plus a deployment hint.
+   `meta.detail`, e.g. `HTTP 401 · Invalid API Key`, plus a deployment hint.
 4. Check that the key is pasted cleanly. Surrounding quotes, a leading `Bearer`, and
    embedded whitespace/newlines are stripped automatically, but a truncated key cannot be
    repaired.
-5. Confirm the app is pinned to `gemini-3.8-flash`; if `GEMINI_MODEL` names a different
-   model, Settings shows a notice that the value was ignored.
-6. Quota: Gemini limits apply per Google Cloud project, not per key. See
-   <https://aistudio.google.com/rate-limit>.
+5. Confirm the model. The default is `llama-3.3-70b-versatile`; if `GROQ_MODEL` names an
+   invalid or unavailable model, Settings shows the active model and any notice.
+6. Quota: Groq limits apply per account and per model. See
+   <https://console.groq.com/docs/rate-limits>.
 
-The Gemini 3.x family thinks by default. This app sends `thinkingLevel: "low"` because
-medium thinking can consume the output budget and produce empty JSON on short structured
-tasks; if you fork the code and remove it, raise `maxOutputTokens` and the timeouts
-accordingly.
+A completion that stops at the output limit (`finish_reason: "length"`) is reported as
+`invalid_response` instead of being parsed; raise `max_completion_tokens` and the timeouts
+together if you extend the prompts.
 
-### Explanations say Gemini was unavailable
+### Explanations say Groq was unavailable
 
 - Inspect the badge and message on the event or summary. `timeout`, `rate_limited`,
   `provider_error`, `invalid_response`, and `unsafe_response` are distinct reasons, and
@@ -629,18 +662,18 @@ accordingly.
   reassurance beyond the evidence. The server retries once with a correction, then falls
   back rather than showing the claim.
 - `invalid_response` usually means truncated JSON (output budget) or a schema mismatch.
-- Verify current model IDs and free-tier availability:
-  <https://ai.google.dev/gemini-api/docs/models>.
-- Check quota and per-project limits at <https://aistudio.google.com/rate-limit>.
+- Verify current model IDs and rate limits:
+  <https://console.groq.com/docs/models> and
+  <https://console.groq.com/docs/rate-limits>.
 
 ### `429 Too many requests`
 
 - The per-instance limiter allows 12 AI requests per minute per IP, 30 ingestion
   requests, and 10 demo resets.
-- Gemini itself may also return quota errors. Wait for the window or quota reset (daily
-  Gemini quotas reset at midnight Pacific).
+- Groq itself may also return rate-limit errors. Wait for the window to reset, or check
+  your account tier.
 - Restarting a serverless function clears only its in-memory limiter; it does not increase
-  Gemini project quota.
+  your Groq rate limit.
 
 ### Demo data disappeared
 
@@ -685,8 +718,8 @@ This is a demonstration, not a validated safety, security, medical, or caregivin
   be wrong.
 - **No threat detection.** Rules and attention labels are configured heuristics and must
   not be used to judge people or make safety decisions.
-- **AI can be wrong.** Gemini output is constrained and checked, but it can still be
-  incomplete or misleading. The interface always labels its source.
+- **AI can be wrong.** Llama 3.3 70B output is constrained and checked, but it can still
+  be incomplete or misleading. The interface always labels its source and model.
 - **No durable server history.** LocalStorage is per browser/profile and is not suitable
   for multi-user or audit use. There is no backup, sync, or export.
 - **No push notifications.** “Notification preferences” shape rule labeling and in-app
@@ -694,13 +727,12 @@ This is a demonstration, not a validated safety, security, medical, or caregivin
 - **No authentication or authorization.** Anyone with the deployment URL can use its
   browser-local demo.
 - **Rate limits are per instance** and not a production abuse control.
-- **The live Google endpoint was not exercised in this environment** (no real API key).
-  The full request/response path was verified with the real `@google/genai` client against
-  a local mock of the documented REST API; key validity, model access, live quota, and
-  real latency must still be confirmed in your deployment (Settings → Test connection).
-- **Model availability changes.** The default `gemini-3.8-flash` was chosen as a current
-  Flash model with free-tier access at the time of development. Re-check Google’s current
-  model and pricing documentation before relying on it.
+- **The live Groq endpoint was not exercised in this environment** (no real API key).
+  The HTTP path was verified end-to-end against a local mock of the OpenAI-compatible API
+  (`GROQ_BASE_URL`); key validity, model access, live rate limits, and real latency must
+  still be confirmed in your deployment (Settings → Test connection).
+- **Model availability changes.** `llama-3.3-70b-versatile` was current when this was
+  written. Re-check Groq’s model and pricing documentation before relying on it.
 - **Accessibility and responsive behavior** are implemented and covered by semantic and
   jsdom checks, but no formal WCAG audit or real-device matrix has been performed.
 - **No browser visual regression testing** is included.
@@ -712,7 +744,7 @@ This is a demonstration, not a validated safety, security, medical, or caregivin
 ```text
 app/
   api/
-    ai/analyze|summary|insights|search/route.ts   Server-side Gemini routes
+    ai/analyze|summary|insights|search/route.ts   Server-side Groq routes
     demo/route.ts                                 Simulated seed endpoint
     events/route.ts                               Simulated ingestion boundary
     health/route.ts                               Configuration health
@@ -733,7 +765,7 @@ components/
   providers/     Theme, app state/persistence, providers
   ui/            Accessible Radix/Tailwind primitives
 lib/
-  ai/            Gemini client, prompts, response schemas, guardrails, fallback, service
+  ai/            Groq client, prompts, schema hints, guardrails, fallback, service
   analytics/     Deterministic facts, overview stats, chart data
   api/           Fetch client and API response helpers
   constants/     Event vocabulary, settings, search, AI configuration

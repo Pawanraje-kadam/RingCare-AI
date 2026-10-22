@@ -72,7 +72,7 @@ export default function OverviewPage() {
       <Callout tone="warning" title="This is a simulation, not a security system">
         RingCare AI is not connected to a Ring account, camera, or real doorbell. All events
         are generated locally and marked simulated. AI explanations may occasionally be
-        produced by deterministic rules when Gemini is unavailable — the source is always
+        produced by deterministic rules when Groq is unavailable — the source is always
         labelled.{" "}
         <Link
           href="/dashboard/timeline"
@@ -89,7 +89,7 @@ export default function OverviewPage() {
           title="Rules-only mode"
           icon={TriangleAlert}
         >
-          No server-side <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-[11px]">GEMINI_API_KEY</code>{" "}
+          No server-side <code className="rounded bg-surface-3 px-1 py-0.5 font-mono text-[11px]">GROQ_API_KEY</code>{" "}
           is configured, so every explanation, summary, and search falls back to
           deterministic logic. The app remains fully usable.{" "}
           <Link href="/dashboard/settings" className="font-medium text-brand underline underline-offset-2">
