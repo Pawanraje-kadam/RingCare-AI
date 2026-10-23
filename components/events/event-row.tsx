@@ -80,7 +80,7 @@ export function EventRow({
                 <span>
                   {event.analysis.model
                     ? `Explained by ${event.analysis.model}`
-                    : "Explained by Llama 3.3 70B"}
+                    : "Explained by GPT-OSS 120B"}
                 </span>
               </>
             ) : event.processingStatus === "received" ? (

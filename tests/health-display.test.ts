@@ -6,13 +6,13 @@ function health(overrides: Partial<AiHealth> = {}): AiHealth {
   return {
     configured: true,
     provider: "Groq",
-    model: "llama-3.3-70b-versatile",
-    modelLabel: "Llama 3.3 70B",
+    model: "openai/gpt-oss-120b",
+    modelLabel: "GPT-OSS 120B",
     promptVersion: "test",
     credentialsVerified: true,
     verificationStatus: "ok",
     verificationMessage:
-      "Groq accepted the key and lists llama-3.3-70b-versatile.",
+      "Groq accepted the key and lists openai/gpt-oss-120b.",
     keySource: "GROQ_API_KEY",
     checkedAt: new Date().toISOString(),
     ...overrides,

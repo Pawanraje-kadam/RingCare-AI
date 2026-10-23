@@ -6,10 +6,10 @@
  * so every AI route, the health check, Settings, and the tests report the same
  * value.
  */
-export const GROQ_MODEL_ID = "llama-3.3-70b-versatile";
+export const GROQ_MODEL_ID = "openai/gpt-oss-120b";
 
 /** Display label kept in one place for UI copy. */
-export const GROQ_MODEL_LABEL = "Llama 3.3 70B";
+export const GROQ_MODEL_LABEL = "GPT-OSS 120B";
 
 /** Backwards-compatible alias used across the codebase. */
 export const DEFAULT_GROQ_MODEL = GROQ_MODEL_ID;
@@ -21,7 +21,7 @@ export const AI_PROVIDER_NAME = "Groq";
 export const DEFAULT_GROQ_BASE_URL = "https://api.groq.com/openai/v1";
 
 /** Bump when prompts change so cached analyses are not reused. */
-export const PROMPT_VERSION = "2026-10-24.1";
+export const PROMPT_VERSION = "2026-10-23.1";
 
 export const AI_LIMITS = {
   analyzeTimeoutMs: 20_000,

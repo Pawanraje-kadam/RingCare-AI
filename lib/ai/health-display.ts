@@ -89,7 +89,7 @@ export function describeAiHealth(
         tone: "attention",
         detail:
           health.verificationMessage ??
-          "Groq does not list llama-3.3-70b-versatile for this key. Check the model name or account access.",
+          "Groq does not list the configured model for this key. Check GROQ_MODEL or your account access.",
         verified: false,
         usable: false,
       };
