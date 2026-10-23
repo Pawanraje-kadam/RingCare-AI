@@ -97,9 +97,9 @@ beforeEach(() => {
         ai: {
           configured: false,
           provider: "Groq",
-          model: "llama-3.3-70b-versatile",
-          modelLabel: "Llama 3.3 70B",
-          promptVersion: "2026-10-24.1",
+          model: "openai/gpt-oss-120b",
+          modelLabel: "GPT-OSS 120B",
+          promptVersion: "2026-10-23.1",
           credentialsVerified: false,
           verificationStatus: "not_configured",
           verificationMessage:

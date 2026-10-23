@@ -104,7 +104,7 @@ export function EventDetailDialog({
     toast({
       title:
         result.meta.mode === "groq"
-          ? `${result.meta.model ?? "Llama 3.3 70B"} explanation ready`
+          ? `${result.meta.model ?? "GPT-OSS 120B"} explanation ready`
           : "Rules-based explanation ready",
       description:
         result.meta.mode === "groq"

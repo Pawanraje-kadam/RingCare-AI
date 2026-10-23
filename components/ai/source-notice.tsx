@@ -20,7 +20,7 @@ export function AiSourceNotice({
             <Sparkles aria-hidden="true" className="size-3" />
             Groq · {GROQ_MODEL_LABEL}
           </Badge>
-          <span className="font-mono">{meta.model ?? "llama-3.3-70b-versatile"}</span>
+          <span className="font-mono">{meta.model ?? "openai/gpt-oss-120b"}</span>
           {meta.cached ? <span>· served from cache</span> : null}
           {showGeneratedAt ? (
             <span>

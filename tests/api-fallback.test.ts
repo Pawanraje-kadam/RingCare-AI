@@ -63,8 +63,8 @@ describe("health route", () => {
     expect(ai.configured).toBe(false);
     expect(ai.credentialsVerified).toBe(false);
     expect(ai.verificationStatus).toBe("not_configured");
-    expect(ai.model).toBe("llama-3.3-70b-versatile");
-    expect(ai.modelLabel).toBe("Llama 3.3 70B");
+    expect(ai.model).toBe("openai/gpt-oss-120b");
+    expect(ai.modelLabel).toBe("GPT-OSS 120B");
     // Env var names may appear in guidance; key-shaped values must not.
     expect(JSON.stringify(body)).not.toMatch(/AIza[0-9A-Za-z_-]{10,}/);
     expect(JSON.stringify(body)).not.toMatch(/secret|bearer/i);

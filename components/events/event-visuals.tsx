@@ -109,7 +109,7 @@ export function AiSourceBadge({
       <span title={cached ? "Served from the server's short-lived in-memory cache." : undefined}>
         <Badge tone="brand" className={className}>
           <Sparkles aria-hidden="true" className="size-3" />
-          {cached ? "Llama 3.3 70B · cached" : "Llama 3.3 70B"}
+          {cached ? "GPT-OSS 120B · cached" : "GPT-OSS 120B"}
         </Badge>
       </span>
     );
@@ -153,6 +153,6 @@ export function EventTypeLabel({
 }
 
 export const AI_SOURCE_LABEL: Record<(typeof AI_SOURCES)[number], string> = {
-  groq: "Groq · Llama 3.3 70B",
+  groq: "Groq · GPT-OSS 120B",
   fallback: "Deterministic rules",
 };

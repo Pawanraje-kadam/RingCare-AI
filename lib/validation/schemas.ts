@@ -55,7 +55,7 @@ export const safeModelNameSchema = z
   .trim()
   .min(3)
   .max(80)
-  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]*$/, "Unsupported model identifier");
+  .regex(/^[a-zA-Z0-9][a-zA-Z0-9._/-]*$/, "Unsupported model identifier");
 
 const eventIdSchema = z
   .string()

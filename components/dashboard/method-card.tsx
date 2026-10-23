@@ -66,7 +66,7 @@ export function MethodCard() {
           <div className="flex items-center justify-between gap-2">
             <p className="flex items-center gap-1.5 text-[11.5px] font-medium text-ink">
               <KeyRound aria-hidden="true" className="size-3.5 text-muted" />
-              Groq · Llama 3.3 70B
+              Groq · GPT-OSS 120B
             </p>
             <Badge tone={health.tone}>
               {health.verified ? (
@@ -87,7 +87,7 @@ export function MethodCard() {
             <div className="flex justify-between gap-3">
               <dt className="text-muted">Model</dt>
               <dd className="text-right font-mono text-ink-2">
-                {aiHealth?.model ?? "llama-3.3-70b-versatile"}
+                {aiHealth?.model ?? "openai/gpt-oss-120b"}
               </dd>
             </div>
             <div className="flex justify-between gap-3">
@@ -149,7 +149,7 @@ export function MethodCard() {
 
         <p className="flex items-start gap-1.5 text-[10.5px] leading-4 text-muted">
           <Sparkles aria-hidden="true" className="mt-0.5 size-3 shrink-0" />
-          Groq (llama-3.3-70b-versatile) is called only when you request an explanation,
+          Groq (openai/gpt-oss-120b) is called only when you request an explanation,
           summary, insight, or search. Events from the automatic generator are never sent
           without your action.
         </p>

@@ -17,7 +17,7 @@ const analysisSettings = toAnalysisSettings(parseSettings({}));
 
 type Responder = (call: number, prompt: string) => string;
 
-function fakeClient(responder: Responder, model = "llama-3.3-70b-versatile") {
+function fakeClient(responder: Responder, model = "openai/gpt-oss-120b") {
   let calls = 0;
   const client: GroqJsonClient & { calls: () => number } = {
     model,
@@ -68,7 +68,7 @@ describe("Groq narration path", () => {
     });
 
     expect(result.meta.mode).toBe("groq");
-    expect(result.meta.model).toBe("llama-3.3-70b-versatile");
+    expect(result.meta.model).toBe("openai/gpt-oss-120b");
     expect(result.analysis.source).toBe("groq");
     expect(result.analysis.attentionLevel).toBe(evaluation.attentionLevel);
     expect(client.calls()).toBe(1);
@@ -183,7 +183,7 @@ describe("Groq narration path", () => {
   it("falls back with a safe detail when the provider rejects the key", async () => {
     const event = makeEvent({ id: "evt_groq_auth", occurredAt: minutesAgo(11) });
     const client: GroqJsonClient = {
-      model: "llama-3.3-70b-versatile",
+      model: "openai/gpt-oss-120b",
       async generateJson() {
         throw new Error("HTTP 401: API key not valid");
       },

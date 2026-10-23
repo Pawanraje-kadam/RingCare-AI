@@ -9,7 +9,7 @@ import {
 } from "@/lib/ai/groq";
 
 const KEY = "gsk_DummyKeyForTests1234567890abcdef";
-const MODEL = "llama-3.3-70b-versatile";
+const MODEL = "openai/gpt-oss-120b";
 
 function completion(content: string | null, finishReason = "stop") {
   return {

@@ -13,7 +13,7 @@ import {
 } from "@/lib/ai/groq";
 
 const GOOD_KEY = "gsk_DummyKeyForTests1234567890abcdef";
-const MODEL = "llama-3.3-70b-versatile";
+const MODEL = "openai/gpt-oss-120b";
 
 beforeEach(() => {
   resetAiVerificationCache();
@@ -135,7 +135,7 @@ describe("Groq credential verification", () => {
 
   it("verifies with the free /models endpoint using a bearer token", async () => {
     const config = readGroqConfig({ GROQ_API_KEY: GOOD_KEY });
-    const fetchImpl = fakeFetch(200, { data: [{ id: MODEL }] });
+    const fetchImpl = fakeFetch(200, { data: [{ id: MODEL }, { id: "llama-3.1-8b-instant" }] });
     const result = await verifyAiAccess(config, {
       fetchImpl: fetchImpl as unknown as typeof fetch,
     });
